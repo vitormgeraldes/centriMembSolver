@@ -1,0 +1,64 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /    A nd          | Version:  v2506                                 |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes
+{
+    default         CrankNicolson 0.8;                // 2ª ordem no tempo
+}
+
+gradSchemes
+{
+    default         Gauss linear;            // malha com baixa não-ortogonalidade
+}
+
+divSchemes
+{
+    default                             none;
+
+    // Momentum: 2ª ordem upwind consistente e robusto
+    div(phi,U)      Gauss linearUpwindV grad(U);
+    // (Opcional se testares Co baixo):  div(phi,U) Gauss QUICKV 1;
+
+    // Escalar CA: TVD bounded para evitar overshoots/negativos
+    div(phi,CA) bounded Gauss limitedLinear 1;
+
+    // Termo viscoso
+    div((nuEff*dev2(T(grad(U)))))  Gauss linear;
+}
+
+
+laplacianSchemes
+{
+    //default Gauss linear corrected;
+    default Gauss linear limited 0.5;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+   default         limited 1;
+
+}
+wallDist
+{
+    method          meshWave;
+}
+
+// ************************************************************************* //

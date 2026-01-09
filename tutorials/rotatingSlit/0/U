@@ -1,0 +1,112 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox          |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+    // Membrane segment A: Spiegler–Kedem law
+    membraneA
+    {
+        type          noSlip;
+        // type          membraneSolventFlux;
+        // model         constantFlux;
+        // Jv            1e-5;     // [m/s]
+        // value         uniform (0 0 0);
+
+        // type          membraneSolventFlux;
+        // model         SpieglerKedem;
+        //
+        // // Hydraulics & coupling
+        // Ah            0.5e-11;   // [m/(Pa*s)]
+        // sigma         1.0;     // [-], defaults to 1.0 if omitted
+        //
+        // // Osmotic pressure model: π = R*T*Σ a_k C^k
+        // virialCoeffs  (0);   // van’t Hoff (a1=1), extend as (a1 a2 ...)
+        // Tconst        298.15;  // [K]
+        //
+        // value         uniform (0 0 0);
+    }
+
+
+    membraneB
+    {
+    // type          noSlip;
+        // type          membraneSolventFlux;
+        // model         constantFlux;
+        // Jv            2e-6;     // [m/s]
+        // value         uniform (0 0 0);
+    //  target average flux mode
+
+        type          membraneSolventFlux;
+        model         targetAverageFlux;
+
+        JvAverage     3e-5;        // [m/s]
+
+        // Optional temporal smoothing of the reported area-average
+        windowAverage true;
+        Twindow       5;           // [s]
+
+        // Optional safety bounds on the internally tuned Ah*
+        AhMin         1e-13;       // [m/(Pa*s)]
+        AhMax         1e-9;        // [m/(Pa*s)]
+
+        sigma         1.0;
+        virialCoeffs  (7314.5 8.253);
+        Tconst        298.15;
+
+        value         uniform (0 0 0);
+
+    // SpieglerKedem flux mode
+    //     // type          membraneSolventFlux;
+    //     // model         constantFlux;
+    //     // Jv            1e-5;     // [m/s]
+    //     // value         uniform (0 0 0);
+    //     type          membraneSolventFlux;
+    //     model         SpieglerKedem;
+    //
+    //     // Hydraulics & coupling
+    //     Ah            0.5e-11;   // [m/(Pa*s)]
+    //     sigma         1.0;     // [-], defaults to 1.0 if omitted
+    //
+    //     // Osmotic pressure model: π = R*T*Σ a_k C^k
+    //     virialCoeffs  (34);   // van’t Hoff (a1=1), extend as (a1 a2 ...)
+    //     Tconst        298.15;  // [K]
+    //
+    //     value         uniform (0 0 0);
+    }
+
+    inlet
+    {
+        type  fixedValue;
+        value uniform (0.01 0 0);   // axial sweep
+    }
+
+    outlet
+    {
+        type  zeroGradient;
+    }
+
+    top
+    {
+        type symmetry;
+    }
+
+    frontAndBack
+    {
+        type empty;
+    }
+}

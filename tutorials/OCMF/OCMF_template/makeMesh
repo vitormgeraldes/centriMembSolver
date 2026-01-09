@@ -1,0 +1,28 @@
+#!/bin/bash
+# --- mesh generation with compression temporarily disabled ---
+
+blockMesh
+for i in {1..5}; do
+    refineWallLayer membrane 0.5 -overwrite
+done
+
+    refineWallLayer inlet 0.5 -overwrite
+    refineWallLayer inlet 0.5 -overwrite
+
+echo ">>> Disabling writeCompression"
+sed -i 's/writeCompression.*/writeCompression off;/' system/controlDict
+echo ">>> Backing up initial fields"
+if [ -d "0" ]; then
+    mv 0 0.ori
+fi
+
+renumberMesh -overwrite
+
+echo ">>> Re-enabling writeCompression"
+sed -i 's/writeCompression.*/writeCompression on;/' system/controlDict
+echo ">>> Restoring initial fields"
+if [ -d "0.ori" ]; then
+    mv 0.ori 0
+fi
+
+echo ">>> Mesh ready."

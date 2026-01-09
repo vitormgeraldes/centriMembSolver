@@ -1,0 +1,65 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox          |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      transportProperties;
+}
+
+transportModel  CAViscosity;
+
+CAViscosityCoeffs
+{
+    fieldName   CA;
+    nu0         [0 2 -1 0 0 0 0] 1e-06;
+
+    // For CA dimensions [1 -3 0 0 0 0 0]:
+    nu1         [-1 5 -1 0 0 0 0] 0;
+    nu2         [-2 8 -1 0 0 0 0] 0;
+
+    clamp
+    {
+        min     [0 2 -1 0 0 0 0] 1e-08;
+        max     [0 2 -1 0 0 0 0] 1e-03;
+    }
+}
+
+diffusivity
+{
+   DAB0  1e-9;
+   DAB1  0;
+   DAB2  0;
+   DAB3  0;
+   DAB4  0;
+
+}
+
+// mass contraction coefficient
+density
+{
+    rho0  998.23;
+    beta  0.9855e-3;
+}
+
+
+// ************Sct************************************************************* //
+
+
+// Optional turbulent Schmidt number if you later build Deff = DAB + nut/Sct
+massTransfer
+{
+    Sct 0.7;   // dimensionless (only used if you code it)
+}
+
+// ************************************************************************* //
+
+
+// ************************************************************************* //

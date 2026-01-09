@@ -1,0 +1,2 @@
+centriMembSolver.C
+EXE = $(FOAM_APPBIN)/centriMembSolver

@@ -1,0 +1,51 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2306                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=64;scalar=64";
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [ 0 1 -1 0 0 0 0 ];
+
+#include "./simulationConditions"
+
+internalField   uniform ( 0 0 0 );
+
+boundaryField
+{
+    membrane
+    {
+        type            membraneSolventFlux;
+        model           SpieglerKedem;
+        Ah              $Ah;
+        sigma           1;
+        CAName          CA;
+        //Virial Coefficients for osmotic pressure
+        #include "../constant/speciesData/${solute}"
+        value           uniform (0 0 0);
+    }
+    inlet
+    {
+        type            pressureInletUniformVelocity;
+        value           uniform ( 0 0 0 );
+    }
+    walls
+    {
+        type            fixedValue;
+        value           uniform ( 0 0 0 );
+    }
+}
+
+
+// ************************************************************************* //

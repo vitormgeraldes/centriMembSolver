@@ -1,0 +1,4 @@
+#!/bin/bash
+export solute=LiCl
+echo "Running for solute: $solute"
+centriMembSolver > log.${solute} 2>&1

@@ -1,0 +1,138 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+|  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|   \\    /   O peration     |                                                 |
+|    \\  /    A nd           | snappyHexMeshDict                               |
+|     \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      snappyHexMeshDict;
+}
+
+castellatedMesh true;
+snap            true;
+addLayers       true;
+mergeTolerance  1e-7;
+
+geometry
+{
+    // Caixa fina adjacente à membrana (x=0) até x = 0.0003 m
+    membraneRefineBox
+    {
+        type searchableBox;
+        min (0        -0.0015 0     );   // x y z (m)
+        max (0.0003    0.0015 0.003 );
+    }
+}
+
+castellatedMeshControls
+{
+    maxLocalCells        200000;
+    maxGlobalCells       500000;
+    minRefinementCells   0;
+    nCellsBetweenLevels  100;
+    resolveFeatureAngle  30;
+
+    // 👇 v25xx precisa disto, senão dá o FATAL que viste
+    allowFreeStandingZoneFaces true;
+
+    features           ();
+    refinementSurfaces {};
+    refinementRegions
+    {
+        membraneRefineBox
+        {
+            mode   inside;
+            levels ((1e15 2));
+        }
+    }
+    locationInMesh (0.0005 0 0.0001);
+}
+
+snapControls
+{
+    nSmoothPatch        3;
+    tolerance           2.0;
+    nSolveIter          30;
+    nRelaxIter          5;
+
+    // Sem extração de arestas (não há STL); snapping suave
+    nFeatureSnapIter    10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap false;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    // tamanhos relativos às células adjacentes
+    relativeSizes           yes;
+    expansionRatio          1.2;
+    finalLayerThickness     0.3;     // 30% da célula base
+    minThickness            0.1;
+
+    // controla “crescimento” lateral de layers para zonas adjacentes
+    nGrow                   0;
+
+    // ✅ obrigatório no v2506 (faltava!)
+    nBufferCellsNoExtrude   0;
+
+    // iterações e suavizações
+    nLayerIter              50;
+    nRelaxIter              10;
+    featureAngle            60;
+    slipFeatureAngle        30;
+    nSmoothSurfaceNormals   3;
+    nSmoothNormals          3;
+    nSmoothThickness        10;
+    maxFaceThicknessRatio   0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle      90;
+
+    layers
+    {
+        membrane
+        {
+            nSurfaceLayers 2;   // nº de camadas na membrana
+            // (herda expansionRatio/finalLayerThickness globais)
+        }
+    }
+}
+
+
+meshQualityControls
+{
+    maxNonOrtho             65;
+    maxBoundarySkewness     20;
+    maxInternalSkewness     4;
+    maxConcave              80;
+    minFlatness             0.5;
+    minVol                  1e-131;
+    minTetQuality           1e-9;
+    minArea                 -1;
+    minTwist                0.02;
+    minDeterminant          0.001;
+    minFaceWeight           0.02;
+    minVolRatio             0.01;
+    minTriangleTwist        0.02;
+    nSmoothScale            4;
+    errorReduction          0.75;
+    relaxed
+    {
+        maxNonOrtho         75;
+    }
+}
+
+writeFlags
+(
+    scalarLevels
+    layerSets
+    layerFields
+);
+
+debug 0;

@@ -1,0 +1,39 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2306                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      setFieldsDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+#include "./constant/thermophysicalProperties"
+defaultFieldValues
+(
+    volScalarFieldValue CA $CA0
+);
+
+regions
+(
+    // Set cell values
+    // (does zerogradient on boundaries)
+    boxToCell
+    {
+        box (-0.0128449 -0.00963331 0.0192572) (0.0033709 0.00636579 0.054685);
+
+
+        fieldValues
+        (
+            volScalarFieldValue CA $CAin
+        );
+    }
+
+);
+
+// ************************************************************************* //

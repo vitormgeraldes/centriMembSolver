@@ -1,0 +1,81 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      blockMeshDict;
+}
+// ... header igual ...
+convertToMeters 1;
+// Base mesh
+// Nx  500;
+// Ny  1;
+// Nz  500;
+// unrefined mesh
+Nx  500;
+Ny  200;
+Nz  1;
+
+vertices
+(
+    // z = 0
+    (0       -0.001  0)
+    (0.005   -0.001  0)
+    (0.005    0.001  0)
+    (0        0.001  0)
+
+    // z = 0.003
+    (0       -0.001  0.00001)
+    (0.005   -0.001  0.00001)
+    (0.005    0.001  0.00001)
+    (0        0.001  0.00001)
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7)
+        ($Nx $Ny $Nz)
+        simpleGrading (1 1 1)
+
+);
+
+boundary
+(
+    membrane { type patch; faces ((0 3 7 4)); }     // x = 0
+    inlet    { type patch; faces ((1 2 6 5)); }     // x = 2.5 mm
+
+    yMinus
+    {
+        type           cyclic;
+        neighbourPatch yPlus;
+        faces ((0 1 5 4));
+    }
+    yPlus
+    {
+        type           cyclic;
+        neighbourPatch yMinus;
+        faces ((3 2 6 7));
+    }
+
+    zMinus
+    {
+        type           cyclic;
+        neighbourPatch zPlus;
+        faces ((0 1 2 3));
+    }
+    zPlus
+    {
+        type           cyclic;
+        neighbourPatch zMinus;
+        faces ((4 5 6 7));
+    }
+);
+

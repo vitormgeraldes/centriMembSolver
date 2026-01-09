@@ -1,0 +1,132 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox          |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+convertToMeters 0.001;
+
+// ----------------------- Parameters -----------------------
+L       20;     // length in x
+H       1;      // height in y
+L1      10;     // split position in x (first membrane segment length)
+
+// Mesh
+nx1     120;    // cells in x (left block: 0..L1)
+nx2     80;     // cells in x (right block: L1..L)
+ny      30;     // cells in y
+nz      1;      // cells in z
+gy      20;     // y grading
+
+
+// ----------------------- Geometry ------------------------
+vertices
+(
+    // z = -0.05
+    (0      0    -0.05)   // 0
+    ($L1    0    -0.05)   // 1
+    ($L     0    -0.05)   // 2
+    (0      $H   -0.05)   // 3
+    ($L1    $H   -0.05)   // 4
+    ($L     $H   -0.05)   // 5
+
+    // z = +0.05
+    (0      0     0.05)   // 6
+    ($L1    0     0.05)   // 7
+    ($L     0     0.05)   // 8
+    (0      $H    0.05)   // 9
+    ($L1    $H    0.05)   // 10
+    ($L     $H    0.05)   // 11
+);
+
+// ------------------------ Blocks --------------------------
+blocks
+(
+    // left block: x in [0, L1]
+    hex (0 1 4 3 6 7 10 9)  ($nx1 $ny $nz) simpleGrading (1 $gy 1)
+
+    // right block: x in [L1, L]
+    hex (1 2 5 4 7 8 11 10) ($nx2 $ny $nz) simpleGrading (1 $gy 1)
+);
+
+edges
+(
+);
+
+// ----------------------- Boundaries -----------------------
+boundary
+(
+    // Bottom wall split into two patches (y = 0)
+    membraneA
+    {
+        type wall;
+        faces
+        (
+            (0 1 7 6)     // bottom face of left block
+        );
+    }
+
+    membraneB
+    {
+        type wall;
+        faces
+        (
+            (1 2 8 7)     // bottom face of right block
+        );
+    }
+
+    // Top symmetry (y = H) – two faces, one per block
+    top
+    {
+        type symmetry;
+        faces
+        (
+            (3 4 10 9)    // left block top
+            (4 5 11 10)   // right block top
+        );
+    }
+
+    // Inlet at x = 0 (single face, left block)
+    inlet
+    {
+        type wall;
+        faces
+        (
+            (0 3 9 6)
+        );
+    }
+
+    // Outlet at x = L (single face, right block)
+    outlet
+    {
+        type wall;
+        faces
+        (
+            (2 5 11 8)
+        );
+    }
+
+    // Front and back (z planes) – two faces per plane
+    frontAndBack
+    {
+        type empty;
+        faces
+        (
+            (0 3 4 1)     // z = -0.05, left
+            (1 4 5 2)     // z = -0.05, right
+            (6 7 10 9)    // z = +0.05, left
+            (7 8 11 10)   // z = +0.05, right
+        );
+    }
+);
+
+mergePatchPairs();

@@ -1,0 +1,78 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2506                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+#include "./constant/simulationConditions"
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+    membrane
+    {
+//         type            membraneSolventFlux;
+//         model           SpieglerKedem;
+//
+//         Ah              $Ah;        // [m/(Pa·s)]  <-- agora é constante!
+//
+//         sigma           1.0;
+//         pPermConst      0;
+//
+//         CAName          CA;
+//         CApName         CAp;
+//         //Virial osmotic coefficients
+//         #include "../constant/speciesData/${solute}"
+//
+//         value           uniform (0 0 0);
+//         // optional moving-average reporting of Jv
+//         windowAverage   true;
+//         Twindow         10;                    // [s]
+//
+//         value           uniform (0 0 0);
+        type            membraneSolventFlux;
+        model           constantFlux;
+        Jv              $Jv;
+        CAName          CA;
+        CApName         CAp;
+        value           uniform (0 0 0);
+    }
+
+    inlet
+    {
+        type            pressureInletUniformVelocity;
+        value           uniform (0 0 0);
+    }
+    yMinus
+    {
+        type            cyclic;
+    }
+    yPlus
+    {
+        type            cyclic;
+    }
+    zMinus
+    {
+        type            cyclic;
+    }
+    zPlus
+    {
+        type            cyclic;
+    }
+}
+
+
+// ************************************************************************* //

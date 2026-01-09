@@ -1,0 +1,91 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  8
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    "rho.*"
+    {
+        solver          diagonal;
+    }
+
+    p_rgh
+    {
+        solver          GAMG;
+        smoother        DIC;
+        tolerance       1e-9;
+        relTol          0.01;
+        maxIter         25;
+
+//         solver           GAMG;
+//         tolerance        1e-12;
+//         relTol           0.01;
+//         smoother         GaussSeidel;
+//         cacheAgglomeration true;
+//         nCellsInCoarsestLevel 10;
+//         agglomerator     faceAreaPair;
+//         mergeLevels      1;
+//         maxIter          25;
+
+    }
+
+    p_rghFinal
+    {
+        $p_rgh;
+        relTol          0;
+    }
+
+    "(U|CA)"
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-9;
+        relTol          0.01;
+    }
+    "(U|CA)Final"
+    {
+        $U;
+        relTol          0;
+    }
+}
+
+PIMPLE
+{
+    momentumPredictor no;
+    nNonOrthogonalCorrectors 0;
+    nCorrectors       3;
+    nOuterCorrectors  5;
+    pMax 100e5;
+    pMin 0;    
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p_rgh               1;
+    }
+    equations
+    {
+        U  0.8;
+        CA 0.8;
+        "(CA)Final" 1;
+
+    }
+}
+
+
+// ************************************************************************* //

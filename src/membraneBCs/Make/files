@@ -1,0 +1,5 @@
+
+membraneSolventFlux/membraneSolventFluxFvPatchVectorField.C
+membraneSoluteFlux/membraneSoluteFluxFvPatchScalarField.C
+
+LIB = $(FOAM_LIBBIN)/libmembraneBCs

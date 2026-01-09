@@ -1,0 +1,22 @@
+#!/bin/bash
+# Usage: ./runCase.sh LiCl 4
+
+export solute=LiCl
+NP=${2:-3}  # default 3 procs if not provided
+
+echo "Running centriMembSolver for solute: $solute on $NP cores"
+
+# Clean up previous runs (optional)
+rm -rf processor* log.*
+
+# Decompose
+decomposePar -force > log.decompose 2>&1
+
+# Run in parallel
+mpirun -np $NP centriMembSolver -parallel > log.${solute} 2>&1
+
+# Optimization may be required for the CPU arquitecture used
+# nohup taskset -c 0-6 numactl --membind=0 mpirun -np 7 --bind-to none centriMembSolver -parallel &
+
+# Reconstruct
+reconstructPar > log.reconstruct 2>&1

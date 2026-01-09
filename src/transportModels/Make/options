@@ -1,0 +1,9 @@
+EXE_INC = \
+    -I$(WM_PROJECT_DIR)/src/transportModels/incompressible/lnInclude \
+    -I$(WM_PROJECT_DIR)/src/finiteVolume/lnInclude \
+    -I$(WM_PROJECT_DIR)/src/OpenFOAM/lnInclude
+
+EXE_LIBS = \
+    -lincompressibleTransportModels \
+    -lfiniteVolume \
+    -lOpenFOAM

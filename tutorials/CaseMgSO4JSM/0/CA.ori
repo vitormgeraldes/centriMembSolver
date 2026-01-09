@@ -1,0 +1,50 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2306                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=64;scalar=64";
+    class       volScalarField;
+    location    "0";
+    object      CA;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+#include "./simulationConditions"
+
+dimensions      [ 1 -3 0 0 0 0 0 ];
+
+internalField   uniform $CA0;
+
+boundaryField
+{
+    membrane
+    {
+        type            membraneSoluteFlux;
+        model           observedRejection;
+        Robs            $Robs;
+        UName           U;
+        computeGama     yes;
+        CAb             $CA0;
+        value           uniform 0;
+    }
+
+    inlet
+    {
+        type            inletOutlet;
+        inletValue      uniform $CA0;
+        value           uniform $CA0;
+    }
+    walls
+    {
+        type            zeroGradient;
+    }
+}
+
+
+// ************************************************************************* //

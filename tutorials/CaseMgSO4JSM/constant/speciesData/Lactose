@@ -1,0 +1,49 @@
+virialCoeffs
+(
+  7314.5
+  8.253
+);
+
+CAViscosityCoeffs
+{
+    // For CA dimensions [1 -3 0 0 0 0 0]:
+    fieldName   CA;
+    nu0         [0 2 -1 0 0 0 0] 1e-6;
+    nu1         [-1 5 -1 0 0 0 0] 2.8e-9;
+    nu2         [-2 8 -1 0 0 0 0] 0;
+
+    clamp
+    {
+        min     [0 2 -1 0 0 0 0] 1e-08;
+        max     [0 2 -1 0 0 0 0] 1e-03;
+    }
+}
+
+diffusivity
+{
+   DAB0   0.496e-9;
+   DAB1  -0.1395e-11;
+   DAB2   0.02148e-12;
+   DAB3  0;
+   DAB4  0;
+
+}
+
+// mass contraction coefficient
+density
+{
+    rho0  998.23;
+    beta  3.75e-4;
+}
+
+
+// ************Sct************************************************************* //
+
+
+// Optional turbulent Schmidt number if you later build Deff = DAB + nut/Sct
+massTransfer
+{
+    Sct 0.7;   // dimensionless (only used if you code it)
+}
+
+// ************************************************************************* //

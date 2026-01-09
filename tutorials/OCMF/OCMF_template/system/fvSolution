@@ -1,0 +1,95 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p_rgh
+    {
+        solver                 GAMG;
+        tolerance              1e-8;          // intermédias: chega e sobra
+        relTol                 0.05;           // 0.05–0.2; 0.1 costuma dar bom speedup
+        smoother               DICGaussSeidel; // mais robusto que DIC simples
+        cacheAgglomeration     true;
+        agglomerator           faceAreaPair;
+        mergeLevels            1;
+
+        nCellsInCoarsestLevel  1000;          // evita ir a níveis demasiado finos
+        nFinestLevel           2;             // (opcional) impede malha “fina demais” no GAMG
+        nSmoothPre             2;
+        nSmoothPost            2;
+        maxIter                10;            // 8–12 é típico para PIMPLE estável
+    }
+
+    p_rghFinal
+    {
+        $p_rgh;
+        relTol          0;
+    }
+
+    U
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-9;
+        relTol          0.05;
+    }
+
+    UFinal
+    {
+        $U;
+        tolerance       1e-9;
+        relTol          0;
+    }
+
+    CA
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-8;
+        relTol          0.05;
+    }
+
+    CAFinal
+    {
+        $CA;
+        relTol          0;
+    }
+}
+
+PIMPLE
+{
+    momentumPredictor no;
+    nNonOrthogonalCorrectors 0;
+    nCorrectors       1;
+    nOuterCorrectors  3;
+    pMax 100e5;
+    pMin 0;
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p_rgh 1.0;
+    }
+    equations
+    {
+        "(U|CA)"       1.0;
+    }
+}
+
+
+// ************************************************************************* //

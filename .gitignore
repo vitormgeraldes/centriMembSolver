@@ -1,0 +1,98 @@
+# OpenFOAM runtime
+processor*/
+log.*
+*.log
+
+# Editors
+*~
+*.swp
+
+
+# OpenFOAM build artefacts (do not commit)
+solver/Make/*Opt/
+solver/Make/*Debug/
+solver/Make/*Prof/
+solver/Make/linux64*/
+*.o
+*.dep
+
+# --- OpenFOAM run-time outputs ---
+processor*/
+postProcessing*/
+log.*
+*.log
+
+# --- OpenFOAM build artefacts ---
+**/Make/*Opt/
+**/Make/*Debug/
+**/Make/*Prof/
+**/Make/linux64*/
+**/*.o
+**/*.dep
+
+# --- Editors / OS ---
+*~
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Common large/generated data (ajusta se precisares) ---
+*.vtk
+*.foam
+*.eMesh
+*.obj
+*.stl
+
+# LaTeX build artefacts
+doc/*.aux
+doc/*.out
+doc/*.toc
+doc/*.synctex.gz
+doc/*.log
+doc/*.pdf
+
+# OpenFOAM build artefacts
+**/Make/linux64*/
+**/Make/*Opt/
+**/Make/*Debug/
+**/Make/*Prof/
+**/*.o
+**/*.dep
+
+# OpenFOAM runtime outputs
+processor*/
+postProcessing*/
+log.*
+*.log
+
+# (cola as regras acima)
+
+git rm -r --cached solver/Make/linux64GccDPInt32Opt
+git rm -r --cached src/membraneBCs/lnInclude
+git rm --cached doc/userGuide.aux doc/userGuide.out doc/userGuide.toc doc/userGuide.synctex.gz doc/userGuide.pdf
+
+git reset --soft HEAD~1
+git add -A
+git status
+# --- OpenFOAM runtime outputs ---
+processor*/
+postProcessing*/
+log.*
+*.log
+
+# --- OpenFOAM build artefacts ---
+**/Make/linux64*/
+**/Make/*Opt/
+**/Make/*Debug/
+**/Make/*Prof/
+**/*.o
+**/*.dep
+**/lnInclude/
+
+# --- LaTeX build artefacts ---
+doc/*.aux
+doc/*.out
+doc/*.toc
+doc/*.synctex.gz
+doc/*.log
+doc/*.pdf
