@@ -1,4 +1,4 @@
 CAViscosity/CAViscosity.C
 
-LIB = $(FOAM_LIBBIN)/libCAViscosity
+LIB = $(FOAM_SITE_LIBBIN)/libCAViscosity
 

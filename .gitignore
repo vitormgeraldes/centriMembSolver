@@ -96,3 +96,5 @@ doc/*.toc
 doc/*.synctex.gz
 doc/*.log
 doc/*.pdf
+/tutorials/**/constant/polyMesh/
+/tutorials/**/constant/polyMesh/

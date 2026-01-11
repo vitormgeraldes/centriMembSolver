@@ -51,6 +51,7 @@ License
 #include "fvOptions.H"
 #include "pimpleControl.H"
 #include "membraneSoluteFluxFvPatchScalarField.H"
+#include "membraneTracerFluxFvPatchScalarField.H"
 #include "membraneSolventFluxFvPatchVectorField.H"
 
 
@@ -127,11 +128,14 @@ int main(int argc, char *argv[])
             }
 
         }
+        #include "CTEqn.H"
+
         #include "pReconstruct.H"
 
         #include "monitorConservation.H"
 
         #include "Gama.H"
+        #include "GamaT.H"
 
         runTime.write();
 

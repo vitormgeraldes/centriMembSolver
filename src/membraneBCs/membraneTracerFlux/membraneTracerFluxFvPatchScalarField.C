@@ -5,50 +5,50 @@
 |   \\  /    A nd           | Version:  v2506                                 |
 |    \\/     M anipulation  |                                                 |
 \*---------------------------------------------------------------------------*/
-/*  membraneSoluteFluxFvPatchScalarField
+/*  membraneTracerFluxFvPatchScalarField
  *
- *  Solute-flux membrane boundary condition (scalar field).
+ *  Tracer-flux membrane boundary condition (scalar field).
  *  Couples diffusive transport with convection at a selective interface.
  *
  *  Models implemented (Spiegler–Kedem / Kedem–Katchalsky family):
  *   1) intrinsicRejection
- *        Js = Jv * Cp,  with Cp = (1 - Rint) * Cw
- *        Film model (Robin BC on CA): k(Cw - Ci) = (Rint * Jv) * Cw
- *        → Cw = [k / (k - Rint*Jv)] * Ci
+ *        JsT = Jv * CTp,  with CTp = (1 - RTint) * CTw
+ *        Film model (Robin BC on CA): k(CTw - CTi) = (RTint * Jv) * CTw
+ *        → CTw = [kT / (kT - RTint*Jv)] * CTi
  *
- *   2) solutePermeability  (SK closure)
- *        SK equation: Js = (1 - σ) Jv Cw + B (Cw - Cp)
- *        → Cp = [(B + (1 - σ)Jv)/(B + Jv)] * Cw = α*Cw
- *        and Js = Jv * Cp
- *        If 'sigma' omitted, σ is inherited from the solvent BC on U (defaults to 1).
+ *   2) tracerPermeability  (SK closure)
+ *        SK equation: JsT = (1 - sigmaT) Jv CTw + BT (CTw - CTp)
+ *        → CTp = [(BT + (1 - sigmaT)Jv)/(BT + Jv)] * CTw = αT*CTw
+ *        and JsT = Jv * CTp
+ *        If 'sigmaT' omitted, σ is inherited from the solvent BC on U (defaults to 1).
  *
  *   3) observedRejection (inverse)
- *        Infers Rint so that Robs_model = 1 - <Jv*Cp>/<Jv>/CAb matches user 'Robs'
+ *        Infers RTint so that RTobs_model = 1 - <Jv*CTp>/<Jv>/CTb matches user 'RTobs'
  *        Uses a safeguarded secant+bisection. MPI-safe reductions.
  *
- *  Diagnostics (if CAb > 0):
- *   Γ = (Cw - CAb)/CAb
- *   Robserved = 1 - <Jv * Cp> / <Jv> / CAb
+ *  Diagnostics (if CTb > 0):
+ *   GamaT = (CTw - CTb)/CTb
+ *   RTobserved = 1 - <Jv * CTp> / <Jv> / CTb
  *
  *  Output:
- *   - Writes per-face Js, Jv, CAp, Γ to the patch dictionary
- *   - Logs time-series in postProcessing/membraneSoluteFlux/<patch>/...
- *   - Summary tables in postProcessing/membraneSoluteFlux/_summary
+ *   - Writes per-face JsT, Jv, CTp, GamaT to the patch dictionary
+ *   - Logs time-series in postProcessing/membraneTracerFlux/<patch>/...
+ *   - Summary tables in postProcessing/membraneTracerFlux/_summary
  *
  *  Units:
- *   CA, CAb [kg/m3];  Jv [m/s];  Js [kg/m2/s];  Deff [m2/s];
- *   B [m/s];  σ, Rint, Robs, Γ [-]
+ *   CT, CTb [kg/m3];  Jv [m/s];  JsT [kg/m2/s];  DTeff [m2/s];
+ *   BT [m/s];  sigmaT, RTint, RTobs, GamaT [-]
  *
  *  Notes:
  *   - Parallel/periodic safe (uses returnReduce, master-only logging guards)
- *   - Stable for small denominators (k - Rint*Jv), clamps when needed
+ *   - Stable for small denominators (kT - RTint*Jv), clamps when needed
  *   - For stationary meshes (no mesh motion assumed)
  *   - This BC may optionally “mirror” its per-face diagnostics into existing
- *     volScalarField(s) named "CAp", "Js", "Jv" if present (see end of updateCoeffs()).
+ *     volScalarField(s) named "CTp", "JsT", "Jv" if present (see end of updateCoeffs()).
  */
 /*---------------------------------------------------------------------------*/
 
-#include "membraneSoluteFluxFvPatchScalarField.H"
+#include "membraneTracerFluxFvPatchScalarField.H"
 #include "addToRunTimeSelectionTable.H"
 #include "membraneSolventFluxFvPatchVectorField.H"
 #include "volFields.H"
@@ -65,32 +65,32 @@ namespace Foam
 {
 
 // Runtime registration
-defineTypeNameAndDebug(membraneSoluteFluxFvPatchScalarField, 0);
+defineTypeNameAndDebug(membraneTracerFluxFvPatchScalarField, 0);
 addToRunTimeSelectionTable
 (
     fvPatchScalarField,
-    membraneSoluteFluxFvPatchScalarField,
+    membraneTracerFluxFvPatchScalarField,
     dictionary
 );
 
 // -------------------- Constructors --------------------
 
-membraneSoluteFluxFvPatchScalarField::membraneSoluteFluxFvPatchScalarField
+membraneTracerFluxFvPatchScalarField::membraneTracerFluxFvPatchScalarField
 (
     const fvPatch& p,
     const DimensionedField<scalar, volMesh>& iF
 )
 :
     mixedFvPatchScalarField(p, iF),
-    Js_(p.size(), Zero),
+    JsT_(p.size(), Zero),
     Jv_(p.size(), Zero),
-    CAp_(p.size(), Zero),
-    Gama_(p.size(), Zero),
-    Robserved_(0.0),
+    CTp_(p.size(), Zero),
+    GamaT_(p.size(), Zero),
+    RTobserved_(0.0),
     lastLoggedTimeIndex_(-1)
 {}
 
-membraneSoluteFluxFvPatchScalarField::membraneSoluteFluxFvPatchScalarField
+membraneTracerFluxFvPatchScalarField::membraneTracerFluxFvPatchScalarField
 (
     const fvPatch& p,
     const DimensionedField<scalar, volMesh>& iF,
@@ -98,11 +98,11 @@ membraneSoluteFluxFvPatchScalarField::membraneSoluteFluxFvPatchScalarField
 )
 :
     mixedFvPatchScalarField(p, iF),
-    Js_(p.size(), Zero),
+    JsT_(p.size(), Zero),
     Jv_(p.size(), Zero),
-    CAp_(p.size(), Zero),
-    Gama_(p.size(), Zero),
-    Robserved_(0.0),
+    CTp_(p.size(), Zero),
+    GamaT_(p.size(), Zero),
+    RTobserved_(0.0),
     lastLoggedTimeIndex_(-1)
 {
     // Field name for velocity (to fetch solvent BC and normals·U)
@@ -116,29 +116,29 @@ membraneSoluteFluxFvPatchScalarField::membraneSoluteFluxFvPatchScalarField
     else                                model_ = Model::Unknown;
 
     // Reference/bulk concentration for diagnostics and inverse mode
-    CAb_ = dict.lookupOrDefault<scalar>("CAb", 0.0);
+    CTb_ = dict.lookupOrDefault<scalar>("CTb", 0.0);
 
     // Model parameters
     if (model_ == Model::intrinsicRejection)
     {
-        Rint_ = dict.lookupOrDefault<scalar>("Rint", 0.0);
+        RTint_ = dict.lookupOrDefault<scalar>("RTint", 0.0);
     }
     else if (model_ == Model::solutePermeability)
     {
-        B_ = dict.lookupOrDefault<scalar>("B", 0.0);
-        hasSigma_ = dict.found("sigma");
-        if (hasSigma_) sigma_ = readScalar(dict.lookup("sigma"));
+        BT_ = dict.lookupOrDefault<scalar>("BT", 0.0);
+        hasSigmaT_ = dict.found("sigmaT");
+        if (hasSigmaT_) sigmaT_ = readScalar(dict.lookup("sigmaT"));
     }
     else if (model_ == Model::observedRejection)
     {
-        Robs_    = dict.lookupOrDefault<scalar>("Robs", 0.0);
-        RintMin_ = dict.lookupOrDefault<scalar>("RintMin", 0.0);
-        RintMax_ = dict.lookupOrDefault<scalar>("RintMax", 0.9999);
+        RTobs_    = dict.lookupOrDefault<scalar>("RTobs", 0.0);
+        RTintMin_ = dict.lookupOrDefault<scalar>("RTintMin", 0.0);
+        RTintMax_ = dict.lookupOrDefault<scalar>("RTintMax", 0.9999);
         tol_     = dict.lookupOrDefault<scalar>("tol", 1e-6);
         maxIter_ = dict.lookupOrDefault<label>("maxIter", 50);
 
         // Minimal seeding if Rint not specified: start from Robs
-        if (!dict.found("Rint")) Rint_ = Robs_;
+        if (!dict.found("RTint")) RTint_ = RTobs_;
     }
 
     // Optional initial "value" (standard for patch fields)
@@ -149,9 +149,9 @@ membraneSoluteFluxFvPatchScalarField::membraneSoluteFluxFvPatchScalarField
 }
 
 // Copy-like constructors
-membraneSoluteFluxFvPatchScalarField::membraneSoluteFluxFvPatchScalarField
+membraneTracerFluxFvPatchScalarField::membraneTracerFluxFvPatchScalarField
 (
-    const membraneSoluteFluxFvPatchScalarField& ptf,
+    const membraneTracerFluxFvPatchScalarField& ptf,
     const fvPatch& p,
     const DimensionedField<scalar, volMesh>& iF,
     const fvPatchFieldMapper& m
@@ -159,84 +159,84 @@ membraneSoluteFluxFvPatchScalarField::membraneSoluteFluxFvPatchScalarField
 :
     mixedFvPatchScalarField(ptf, p, iF, m),
     UName_(ptf.UName_),
-    Rint_(ptf.Rint_),
-    B_(ptf.B_),
-    sigma_(ptf.sigma_),
-    hasSigma_(ptf.hasSigma_),
-    Robs_(ptf.Robs_),
-    RobsAchieved_(ptf.RobsAchieved_),
-    CAb_(ptf.CAb_),
-    RintMin_(ptf.RintMin_),
-    RintMax_(ptf.RintMax_),
+    RTint_(ptf.RTint_),
+    BT_(ptf.BT_),
+    sigmaT_(ptf.sigmaT_),
+    hasSigmaT_(ptf.hasSigmaT_),
+    RTobs_(ptf.RTobs_),
+    RTobsAchieved_(ptf.RTobsAchieved_),
+    CTb_(ptf.CTb_),
+    RTintMin_(ptf.RTintMin_),
+    RTintMax_(ptf.RTintMax_),
     tol_(ptf.tol_),
     maxIter_(ptf.maxIter_),
     model_(ptf.model_),
-    Js_(ptf.Js_),
+    JsT_(ptf.JsT_),
     Jv_(ptf.Jv_),
-    CAp_(ptf.CAp_),
-    Gama_(ptf.Gama_),
-    Robserved_(ptf.Robserved_),
+    CTp_(ptf.CTp_),
+    GamaT_(ptf.GamaT_),
+    RTobserved_(ptf.RTobserved_),
     lastLoggedTimeIndex_(ptf.lastLoggedTimeIndex_)
 {}
 
-membraneSoluteFluxFvPatchScalarField::membraneSoluteFluxFvPatchScalarField
+membraneTracerFluxFvPatchScalarField::membraneTracerFluxFvPatchScalarField
 (
-    const membraneSoluteFluxFvPatchScalarField& ptf
+    const membraneTracerFluxFvPatchScalarField& ptf
 )
 :
     mixedFvPatchScalarField(ptf),
     UName_(ptf.UName_),
-    Rint_(ptf.Rint_),
-    B_(ptf.B_),
-    sigma_(ptf.sigma_),
-    hasSigma_(ptf.hasSigma_),
-    Robs_(ptf.Robs_),
-    RobsAchieved_(ptf.RobsAchieved_),
-    CAb_(ptf.CAb_),
-    RintMin_(ptf.RintMin_),
-    RintMax_(ptf.RintMax_),
+    RTint_(ptf.RTint_),
+    BT_(ptf.BT_),
+    sigmaT_(ptf.sigmaT_),
+    hasSigmaT_(ptf.hasSigmaT_),
+    RTobs_(ptf.RTobs_),
+    RTobsAchieved_(ptf.RTobsAchieved_),
+    CTb_(ptf.CTb_),
+    RTintMin_(ptf.RTintMin_),
+    RTintMax_(ptf.RTintMax_),
     tol_(ptf.tol_),
     maxIter_(ptf.maxIter_),
     model_(ptf.model_),
-    Js_(ptf.Js_),
+    JsT_(ptf.JsT_),
     Jv_(ptf.Jv_),
-    CAp_(ptf.CAp_),
-    Gama_(ptf.Gama_),
-    Robserved_(ptf.Robserved_),
+    CTp_(ptf.CTp_),
+    GamaT_(ptf.GamaT_),
+    RTobserved_(ptf.RTobserved_),
     lastLoggedTimeIndex_(ptf.lastLoggedTimeIndex_)
 {}
 
-membraneSoluteFluxFvPatchScalarField::membraneSoluteFluxFvPatchScalarField
+membraneTracerFluxFvPatchScalarField::membraneTracerFluxFvPatchScalarField
 (
-    const membraneSoluteFluxFvPatchScalarField& ptf,
+    const membraneTracerFluxFvPatchScalarField& ptf,
     const DimensionedField<scalar, volMesh>& iF
 )
 :
     mixedFvPatchScalarField(ptf, iF),
     UName_(ptf.UName_),
-    Rint_(ptf.Rint_),
-    B_(ptf.B_),
-    sigma_(ptf.sigma_),
-    hasSigma_(ptf.hasSigma_),
-    Robs_(ptf.Robs_),
-    RobsAchieved_(ptf.RobsAchieved_),
-    CAb_(ptf.CAb_),
-    RintMin_(ptf.RintMin_),
-    RintMax_(ptf.RintMax_),
+    RTint_(ptf.RTint_),
+    BT_(ptf.BT_),
+    sigmaT_(ptf.sigmaT_),
+    hasSigmaT_(ptf.hasSigmaT_),
+    RTobs_(ptf.RTobs_),
+    RTobsAchieved_(ptf.RTobsAchieved_),
+    CTb_(ptf.CTb_),
+    RTintMin_(ptf.RTintMin_),
+    RTintMax_(ptf.RTintMax_),
     tol_(ptf.tol_),
     maxIter_(ptf.maxIter_),
     model_(ptf.model_),
-    Js_(ptf.Js_),
+    JsT_(ptf.JsT_),
     Jv_(ptf.Jv_),
-    CAp_(ptf.CAp_),
-    Gama_(ptf.Gama_),
-    Robserved_(ptf.Robserved_),
+    CTp_(ptf.CTp_),
+    GamaT_(ptf.GamaT_),
+    RTobserved_(ptf.RTobserved_),
     lastLoggedTimeIndex_(ptf.lastLoggedTimeIndex_)
 {}
 
 // -------------------- Helpers --------------------
 
-scalar membraneSoluteFluxFvPatchScalarField::sigmaFromUOrDefault1_
+scalar membraneTracerFluxFvPatchScalarField::sigmaTFromUOrDefault1_
 (
     const label patchI
 ) const
@@ -254,81 +254,81 @@ scalar membraneSoluteFluxFvPatchScalarField::sigmaFromUOrDefault1_
     return 1.0;
 }
 
-scalar membraneSoluteFluxFvPatchScalarField::evaluateForRint_
+scalar membraneTracerFluxFvPatchScalarField::evaluateForRTint_
 (
-    const scalar Rint,
-    const scalarField& Ci,
-    const scalarField& kDel,
+    const scalar RTint,
+    const scalarField& CTi,
+    const scalarField& kTDel,
     const scalarField& Jv,
     const scalarField& Ap,
-    scalar& CpFluxAvg
+    scalar& CTpFluxAvg
 ) const
 {
-    // Compute flux-weighted Cp average for a given Rint (LOCAL only here).
-    const label n = Ci.size();
-    scalar sumJvA = 0.0, sumJvCpA = 0.0;
+    // Compute flux-weighted CTp average for a given Rint (LOCAL only here).
+    const label n = CTi.size();
+    scalar sumJvA = 0.0, sumJvCTpA = 0.0;
 
     for (label i=0; i<n; ++i)
     {
-        const scalar k = max(kDel[i], SMALL);
+        const scalar k = max(kTDel[i], SMALL);
         const scalar J = Jv[i];
-        const scalar denom = k - Rint*J;
-        const scalar Cw = (denom > SMALL ? (k/denom)*Ci[i] : Ci[i]);
-        const scalar Cp = max(0.0, (1.0 - Rint) * Cw);
+        const scalar denom = k - RTint*J;
+        const scalar CTw = (denom > SMALL ? (k/denom)*CTi[i] : CTi[i]);
+        const scalar CTp = max(0.0, (1.0 - RTint) * CTw);
 
         sumJvA    += J * Ap[i];
-        sumJvCpA  += J * Cp * Ap[i];
+        sumJvCTpA  += J * CTp * Ap[i];
     }
 
-    CpFluxAvg = (sumJvA > VSMALL ? sumJvCpA/sumJvA : 0.0);
-    return CpFluxAvg;
+    CTpFluxAvg = (sumJvA > VSMALL ? sumJvCTpA/sumJvA : 0.0);
+    return CTpFluxAvg;
 }
 
-scalar membraneSoluteFluxFvPatchScalarField::inferRintFromObserved_
+scalar membraneTracerFluxFvPatchScalarField::inferRTintFromObserved_
 (
-    const scalarField& Ci,
-    const scalarField& kDel,
+    const scalarField& CTi,
+    const scalarField& kTDel,
     const scalarField& Jv,
     const scalarField& Ap,
-    scalar& RobsAchieved
+    scalar& RTobsAchieved
 ) const
 {
-    // Robs(model) at R, computed from GLOBAL (reduced) sums each call
-    auto RobsOf = [&](const scalar R)->scalar
+    // RTobs(model) at R, computed from GLOBAL (reduced) sums each call
+    auto RTobsOf = [&](const scalar RT)->scalar
     {
         scalar sumJvA_local   = 0.0;
-        scalar sumJvCpA_local = 0.0;
-        const label n = Ci.size();
+        scalar sumJvCTpA_local = 0.0;
+        const label n = CTi.size();
 
         for (label i=0; i<n; ++i)
         {
-            const scalar k = max(kDel[i], SMALL);
+            const scalar k = max(kTDel[i], SMALL);
             const scalar J = Jv[i];
-            const scalar denom = k - R*J;
-            const scalar Cw = (denom > SMALL ? (k/denom)*Ci[i] : Ci[i]);
-            const scalar Cp = max(0.0, (1.0 - R) * Cw);
+            const scalar denom = k - RT*J;
+            const scalar CTw = (denom > SMALL ? (k/denom)*CTi[i] : CTi[i]);
+            const scalar CTp = max(0.0, (1.0 - RT) * CTw);
 
             sumJvA_local   += J * Ap[i];
-            sumJvCpA_local += J * Cp * Ap[i];
+            sumJvCTpA_local += J * CTp * Ap[i];
         }
 
         const scalar sumJvA   = returnReduce(sumJvA_local,   sumOp<scalar>());
-        const scalar sumJvCpA = returnReduce(sumJvCpA_local, sumOp<scalar>());
+        const scalar sumJvCTpA = returnReduce(sumJvCTpA_local, sumOp<scalar>());
 
-        const scalar CpFluxAvg_global =
-            (sumJvA > VSMALL ? sumJvCpA / sumJvA : 0.0);
+        const scalar CTpFluxAvg_global =
+            (sumJvA > VSMALL ? sumJvCTpA / sumJvA : 0.0);
 
-        return 1.0 - (CAb_ > SMALL ? CpFluxAvg_global / CAb_ : 0.0);
+        return 1.0 - (CTb_ > SMALL ? CTpFluxAvg_global / CTb_ : 0.0);
     };
 
-    const scalar target = Robs_;
-    const scalar aG = clamp(RintMin_, 0.0, 0.999999);
-    const scalar bG = clamp(RintMax_, aG + SMALL, 0.9999999);
+    const scalar target = RTobs_;
+    const scalar aG = clamp(RTintMin_, 0.0, 0.999999);
+    const scalar bG = clamp(RTintMax_, aG + SMALL, 0.9999999);
 
     // Seed from last step
-    scalar R = clamp(Rint_, aG, bG);
-    scalar f = RobsOf(R);
-    if (mag(f - target) < tol_) { RobsAchieved = f; return R; }
+    scalar RT = clamp(RTint_, aG, bG);
+    scalar f = RTobsOf(RT);
+    if (mag(f - target) < tol_) { RTobsAchieved = f; return RT; }
 
     // Safeguarded secant parameters
     scalar d0  = 0.01*(bG - aG);   // probe step (1%)
@@ -337,43 +337,43 @@ scalar membraneSoluteFluxFvPatchScalarField::inferRintFromObserved_
     for (int it=0; it<maxIter_; ++it)
     {
         // Symmetric probe to estimate slope
-        scalar d = min(d0, min(R - aG, bG - R) * 0.5);
+        scalar d = min(d0, min(RT - aG, bG - RT) * 0.5);
         if (d <= SMALL) d = 0.5*(bG - aG)*1e-3;
 
-        const scalar Rm = max(aG, R - d);
-        const scalar Rp = min(bG, R + d);
-        const scalar fm = RobsOf(Rm);
-        const scalar fp = RobsOf(Rp);
-        const scalar slope = (fp - fm) / max(Rp - Rm, SMALL);
+        const scalar RTm = max(aG, RT - d);
+        const scalar RTp = min(bG, RT + d);
+        const scalar fm = RTobsOf(RTm);
+        const scalar fp = RTobsOf(RTp);
+        const scalar slope = (fp - fm) / max(RTp - RTm, SMALL);
 
         if (mag(slope) < VSMALL)
         {
             // Too flat: gentle nudge towards target
             const scalar dir  = (f < target ? 1.0 : -1.0);
             const scalar step = clamp(0.25*dMax, 1e-5, dMax);
-            const scalar Rtry = clamp(R + dir*step, aG, bG);
-            const scalar ftry = RobsOf(Rtry);
+            const scalar RTtry = clamp(RT + dir*step, aG, bG);
+            const scalar ftry = RTobsOf(RTtry);
 
             if (mag(ftry - target) < mag(f - target))
             {
-                R = Rtry; f = ftry;
+                RT = RTtry; f = ftry;
                 if (mag(f - target) < tol_) break;
             }
             else
             {
                 // Robust fallback: global bisection
-                scalar a = aG, b = bG, fa = RobsOf(a), fb = RobsOf(b);
+                scalar a = aG, b = bG, fa = RTobsOf(a), fb = RTobsOf(b);
 
                 if ((fa - target) > 0 && (fb - target) > 0)
-                { RobsAchieved = fb; return b; }
+                { RTobsAchieved = fb; return b; }
                 if ((fa - target) < 0 && (fb - target) < 0)
-                { RobsAchieved = fa; return a; }
+                { RTobsAchieved = fa; return a; }
 
                 for (int it2=0; it2<maxIter_; ++it2)
                 {
                     const scalar mid = 0.5*(a + b);
-                    const scalar fm2 = RobsOf(mid);
-                    if (mag(fm2 - target) < tol_) { RobsAchieved = fm2; return mid; }
+                    const scalar fm2 = RTobsOf(mid);
+                    if (mag(fm2 - target) < tol_) { RTobsAchieved = fm2; return mid; }
 
                     if ((fa - target)*(fm2 - target) <= 0)
                     { b = mid; fb = fm2; }
@@ -381,38 +381,38 @@ scalar membraneSoluteFluxFvPatchScalarField::inferRintFromObserved_
                     { a = mid; fa = fm2; }
                 }
                 const scalar mid = 0.5*(a + b);
-                RobsAchieved = RobsOf(mid);
+                RTobsAchieved = RTobsOf(mid);
                 return mid;
             }
             continue;
         }
 
         // Secant/Newton-like update (clamped)
-        scalar Rnext = R + (target - f)/slope;
-        const scalar jump = clamp(Rnext - R, -dMax, dMax);
-        Rnext = clamp(R + jump, aG, bG);
+        scalar RTnext = RT + (target - f)/slope;
+        const scalar jump = clamp(RTnext - RT, -dMax, dMax);
+        RTnext = clamp(RT + jump, aG, bG);
 
-        const scalar fnext = RobsOf(Rnext);
-        if (mag(fnext - target) < tol_) { RobsAchieved = fnext; return Rnext; }
+        const scalar fnext = RTobsOf(RTnext);
+        if (mag(fnext - target) < tol_) { RTobsAchieved = fnext; return RTnext; }
 
         if (mag(fnext - target) < mag(f - target))
-        { R = Rnext; f = fnext; }
+        { RT = RTnext; f = fnext; }
         else
         { d0 *= 0.5; }
     }
 
-    RobsAchieved = f;
-    return R;
+    RTobsAchieved = f;
+    return RT;
 }
 
 // -------------------- updateCoeffs --------------------
 
-void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
+void membraneTracerFluxFvPatchScalarField::updateCoeffs()
 {
     if (updated()) return;
 
     const label patchI = patch().index();
-// --- FAIL-FAST: exigir campos de exportação (CAp, Js, Jv) ---
+// --- FAIL-FAST: exigir campos de exportação (CTp, Js, Jv) ---
 {
     const label pid = patchI;
 
@@ -447,12 +447,11 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
         return f;
     };
 
-
-    //   CAp : [1 -3 0 0 0 0 0]  (kg/m3)
-    //   Js  : [1 -2 -1 0 0 0 0] (kg/m2/s)
+    //   CTp : [1 -3 0 0 0 0 0]  (kg/m3)
+    //   JsT : [1 -2 -1 0 0 0 0] (kg/m2/s)
     //   Jv  : [0  1 -1 0 0 0 0] (m/s)
-    (void)requireField("CAp", "dimensionSet(1,-3,0,0,0,0,0)");
-    (void)requireField("Js",  "dimensionSet(1,-2,-1,0,0,0,0)");
+    (void)requireField("CTp", "dimensionSet(1,-3,0,0,0,0,0)");
+    (void)requireField("JsT",  "dimensionSet(1,-2,-1,0,0,0,0)");
     (void)requireField("Jv",  "dimensionSet(0, 1,-1,0,0,0,0)");
 }
 // --- fim FAIL-FAST ---
@@ -465,8 +464,8 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
     const volVectorField& U = db().lookupObject<volVectorField>(UName_);
     const vectorField& Up   = U.boundaryField()[patchI];
 
-    const volScalarField& Deff = db().lookupObject<volScalarField>("Deff");
-    const scalarField& Dp      = Deff.boundaryField()[patchI]; // [m2/s]
+    const volScalarField& DTeff = db().lookupObject<volScalarField>("DTeff");
+    const scalarField& DTp      = DTeff.boundaryField()[patchI]; // [m2/s]
 
     const scalarField Ci = this->patchInternalField();   // [kg/m3] (owner side)
 
@@ -475,12 +474,12 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
     forAll(Jv_, i) Jv_[i] = max(Up[i] & n[i], scalar(0));
 
     // Film conductance k = D * delta [m/s]
-    scalarField kDel(patch().size(), 0.0);
-    forAll(kDel, i) kDel[i] = max(Dp[i]*delta[i], SMALL);
+    scalarField kTDel(patch().size(), 0.0);
+    forAll(kTDel, i) kTDel[i] = max(DTp[i]*delta[i], SMALL);
 
     // Prepare model state
-    scalar RintUsed = Rint_;
-    RobsAchieved_ = 0.0;
+    scalar RTintUsed = RTint_;
+    RTobsAchieved_ = 0.0;
 
     if (model_ == Model::observedRejection)
     {
@@ -489,16 +488,16 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
         forAll(Jv_, i) localSumJvA += Jv_[i] * Ap[i];
         const scalar sumJvA = returnReduce(localSumJvA, sumOp<scalar>());
 
-        if (sumJvA <= VSMALL || CAb_ <= SMALL)
+        if (sumJvA <= VSMALL || CTb_ <= SMALL)
         {
             WarningInFunction
-                << "observedRejection: insufficient permeation or CAb<=0 on patch '"
-                << patch().name() << "'. Keeping Rint=" << Rint_ << nl;
-            RintUsed = Rint_;
+                << "observedRejection: insufficient permeation or CTb<=0 on patch '"
+                << patch().name() << "'. Keeping RTint=" << RTint_ << nl;
+            RTintUsed = RTint_;
         }
         else
         {
-            RintUsed = inferRintFromObserved_(Ci, kDel, Jv_, Ap, RobsAchieved_);
+            RTintUsed = inferRTintFromObserved_(Ci, kTDel, Jv_, Ap, RTobsAchieved_);
         }
     }
 
@@ -508,33 +507,33 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
     this->valueFraction() = scalarField(patch().size(), 0.0);
 
     // Per-face diagnostics
-    Js_.setSize(patch().size(), 0.0);
-    CAp_.setSize(patch().size(), 0.0);
-    Gama_.setSize(patch().size(), 0.0);
+    JsT_.setSize(patch().size(), 0.0);
+    CTp_.setSize(patch().size(), 0.0);
+    GamaT_.setSize(patch().size(), 0.0);
 
-    // σ used (only for solutePermeability)
-    const scalar sigmaEffDefault =
+    // sigmaT used (only for solutePermeability)
+    const scalar sigmaTEffDefault =
         (model_ == Model::solutePermeability)
-        ? (hasSigma_ ? sigma_ : sigmaFromUOrDefault1_(patchI))
+        ? (hasSigmaT_ ? sigmaT_ : sigmaTFromUOrDefault1_(patchI))
         : 1.0;
 
     // Face loop
     forAll(Ci, i)
     {
-        const scalar k = max(kDel[i], SMALL);   // [m/s]
+        const scalar k = max(kTDel[i], SMALL);   // [m/s]
         const scalar J = Jv_[i];                // [m/s]
 
         // hMix is the "Robin" term we push to the LHS (negative of physical coupling)
         scalar hMix = 0.0;
         if (model_ == Model::intrinsicRejection || model_ == Model::observedRejection)
         {
-            const scalar hPhys = RintUsed * J;
+            const scalar hPhys = RTintUsed * J;
             hMix = -hPhys;
         }
         else if (model_ == Model::solutePermeability)
         {
-            const scalar denomBJ = max(B_ + J, SMALL);
-            const scalar hPhys   = (J > SMALL ? sigmaEffDefault * J*J / denomBJ : 0.0);
+            const scalar denomBTJ = max(BT_ + J, SMALL);
+            const scalar hPhys   = (J > SMALL ? sigmaTEffDefault * J*J / denomBTJ : 0.0);
             hMix = -hPhys;
         }
         else
@@ -548,75 +547,75 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
         // Build the mixed BC coefficients
         const scalar denom = k + hMix; // = k - hPhys
         scalar vf = 0.0;
-        scalar Cw = Ci[i];
+        scalar CTw = Ci[i];
 
         if (denom > SMALL)
         {
             vf = hMix/denom;        // valueFraction
-            Cw = (k/denom)*Ci[i];   // wall concentration
+            CTw = (k/denom)*Ci[i];   // wall concentration
         }
         else
         {
             // Degenerate case: keep numerically safe
             const scalar denomSafe = SMALL;
             vf = hMix/denomSafe;
-            Cw = (k/denomSafe)*Ci[i];
+            CTw = (k/denomSafe)*Ci[i];
         }
         this->valueFraction()[i] = vf;
 
         // Permeate concentration Cp and solute flux Js
         if (model_ == Model::intrinsicRejection || model_ == Model::observedRejection)
         {
-            const scalar Cp = max(0.0, (1.0 - RintUsed) * Cw);
-            CAp_[i] = Cp;
-            Js_[i]  = J * CAp_[i];
+            const scalar CTp = max(0.0, (1.0 - RTintUsed) * CTw);
+            CTp_[i] = CTp;
+            JsT_[i]  = J * CTp_[i];
         }
         else // solutePermeability
         {
             const scalar alpha =
-                (B_ + (1.0 - sigmaEffDefault)*J) / max(B_ + J, SMALL);
-            const scalar Cp = max(0.0, alpha * Cw);
-            CAp_[i] = Cp;
-            Js_[i]  = J * CAp_[i];
+                (BT_ + (1.0 - sigmaTEffDefault)*J) / max(BT_ + J, SMALL);
+            const scalar CTp = max(0.0, alpha * CTw);
+            CTp_[i] = CTp;
+            JsT_[i]  = J * CTp_[i];
         }
 
-        // Polarization Γ = (Cw - CAb)/CAb (if CAb>0)
-        Gama_[i] = (CAb_ > SMALL) ? (Cw - CAb_)/CAb_ : 0.0;
+        // Polarization Γ = (CTw - CAb)/CAb (if CAb>0)
+        GamaT_[i] = (CTb_ > SMALL) ? (CTw - CTb_)/CTb_ : 0.0;
     }
 
     // Observed rejection from flux-weighted mean (global, MPI-safe)
-    if (CAb_ > SMALL)
+    if (CTb_ > SMALL)
     {
         scalar localSumJvA   = 0.0;
-        scalar localSumJvCpA = 0.0;
+        scalar localSumJvCTpA = 0.0;
         forAll(Jv_, i)
         {
             localSumJvA   += Jv_[i] * Ap[i];
-            localSumJvCpA += Jv_[i]*CAp_[i]* Ap[i];
+            localSumJvCTpA += Jv_[i]*CTp_[i]* Ap[i];
         }
         const scalar sumJvA   = returnReduce(localSumJvA,   sumOp<scalar>());
-        const scalar sumJvCpA = returnReduce(localSumJvCpA, sumOp<scalar>());
+        const scalar sumJvCTpA = returnReduce(localSumJvCTpA, sumOp<scalar>());
 
         if (sumJvA > VSMALL)
         {
-            const scalar CpFluxAvg_global = sumJvCpA/sumJvA;
-            Robserved_ = 1.0 - CpFluxAvg_global / CAb_;
-            Robserved_ = max(0.0, min(1.0, Robserved_));
+            const scalar CTpFluxAvg_global = sumJvCTpA/sumJvA;
+            RTobserved_ = 1.0 - CTpFluxAvg_global / CTb_;
+            RTobserved_ = max(0.0, min(1.0, RTobserved_));
         }
         else
         {
-            Robserved_ = 0.0; // negligible permeation
+            RTobserved_ = 0.0; // negligible permeation
         }
     }
     else
     {
-        Robserved_ = 0.0; // undefined without reference → keep numeric
+        RTobserved_ = 0.0; // undefined without reference → keep numeric
     }
 
-    // Persist the Rint used by the inverse model (so it is written out)
+    // Persist the RTint used by the inverse model (so it is written out)
     if (model_ == Model::observedRejection)
     {
-        const_cast<membraneSoluteFluxFvPatchScalarField*>(this)->Rint_ = RintUsed;
+        const_cast<membraneTracerFluxFvPatchScalarField*>(this)->RTint_ = RTintUsed;
     }
 
     // (Optional) Export diagnostics directly into existing volScalarFields.
@@ -625,22 +624,22 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
     {
         const label pid = patch().index();
 
-        if (db().foundObject<volScalarField>("CAp"))
+        if (db().foundObject<volScalarField>("CTp"))
         {
-            auto& CApField =
-                const_cast<volScalarField&>(db().lookupObject<volScalarField>("CAp"));
-            if (CApField.boundaryField()[pid].size() == CAp_.size())
+            auto& CTpField =
+                const_cast<volScalarField&>(db().lookupObject<volScalarField>("CTp"));
+            if (CTpField.boundaryField()[pid].size() == CTp_.size())
             {
-                CApField.boundaryFieldRef()[pid] = CAp_;
+                CTpField.boundaryFieldRef()[pid] = CTp_;
             }
         }
-        if (db().foundObject<volScalarField>("Js"))
+        if (db().foundObject<volScalarField>("JsT"))
         {
-            auto& JsField =
-                const_cast<volScalarField&>(db().lookupObject<volScalarField>("Js"));
-            if (JsField.boundaryField()[pid].size() == Js_.size())
+            auto& JsTField =
+                const_cast<volScalarField&>(db().lookupObject<volScalarField>("JsT"));
+            if (JsTField.boundaryField()[pid].size() == JsT_.size())
             {
-                JsField.boundaryFieldRef()[pid] = Js_;
+                JsTField.boundaryFieldRef()[pid] = JsT_;
             }
         }
         if (db().foundObject<volScalarField>("Jv"))
@@ -663,7 +662,7 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
 
 // -------------------- write --------------------
 
-void membraneSoluteFluxFvPatchScalarField::write(Ostream& os) const
+void membraneTracerFluxFvPatchScalarField::write(Ostream& os) const
 {
     fvPatchScalarField::write(os);
 
@@ -682,37 +681,37 @@ void membraneSoluteFluxFvPatchScalarField::write(Ostream& os) const
 
     if (model_ == Model::intrinsicRejection || model_ == Model::observedRejection)
     {
-        os.writeKeyword("Rint") << Rint_ << token::END_STATEMENT << nl;
+        os.writeKeyword("RTint") << RTint_ << token::END_STATEMENT << nl;
     }
 
     if (model_ == Model::solutePermeability)
     {
-        const scalar sigmaUsed =
-            (hasSigma_ ? sigma_ : sigmaFromUOrDefault1_(patch().index()));
-        os.writeKeyword("B")          << B_         << token::END_STATEMENT << nl;
-        os.writeKeyword("sigmaUsed")  << sigmaUsed  << token::END_STATEMENT << nl;
-        if (hasSigma_)
+        const scalar sigmaTUsed =
+            (hasSigmaT_ ? sigmaT_ : sigmaTFromUOrDefault1_(patch().index()));
+        os.writeKeyword("BT")          << BT_         << token::END_STATEMENT << nl;
+        os.writeKeyword("sigmaTUsed")  << sigmaTUsed  << token::END_STATEMENT << nl;
+        if (hasSigmaT_)
         {
-            os.writeKeyword("sigmaExplicit") << sigma_ << token::END_STATEMENT << nl;
+            os.writeKeyword("sigmaTExplicit") << sigmaT_ << token::END_STATEMENT << nl;
         }
     }
 
     if (model_ == Model::observedRejection)
     {
-        os.writeKeyword("Robs")          << Robs_          << token::END_STATEMENT << nl;
-        os.writeKeyword("RobsAchieved")  << RobsAchieved_  << token::END_STATEMENT << nl;
+        os.writeKeyword("RTobs")          << RTobs_          << token::END_STATEMENT << nl;
+        os.writeKeyword("RTobsAchieved")  << RTobsAchieved_  << token::END_STATEMENT << nl;
     }
 
     // Reference and per-face diagnostics
-    os.writeKeyword("CAb") << CAb_ << token::END_STATEMENT << nl;
-    os.writeKeyword("Js")  << Js_  << token::END_STATEMENT << nl;
+    os.writeKeyword("CTb") << CTb_ << token::END_STATEMENT << nl;
+    os.writeKeyword("JsT")  << JsT_  << token::END_STATEMENT << nl;
     os.writeKeyword("Jv")  << Jv_  << token::END_STATEMENT << nl;
-    os.writeKeyword("CAp") << CAp_ << token::END_STATEMENT << nl;
+    os.writeKeyword("CTp") << CTp_ << token::END_STATEMENT << nl;
 
-    if (CAb_ > SMALL)
+    if (CTb_ > SMALL)
     {
-        os.writeKeyword("Gama")      << Gama_      << token::END_STATEMENT << nl;
-        os.writeKeyword("Robserved") << Robserved_ << token::END_STATEMENT << nl;
+        os.writeKeyword("GamaT")      << GamaT_      << token::END_STATEMENT << nl;
+        os.writeKeyword("RTobserved") << RTobserved_ << token::END_STATEMENT << nl;
     }
 
     writeEntry("value", os);
@@ -732,35 +731,35 @@ void membraneSoluteFluxFvPatchScalarField::write(Ostream& os) const
             };
 
             // Ensure base directories exist
-            const fileName base    = casePostDir("membraneSoluteFlux") / patch().name();
-            const fileName sumBase = casePostDir("membraneSoluteFlux") / "_summary";
+            const fileName base    = casePostDir("membraneTracerFlux") / patch().name();
+            const fileName sumBase = casePostDir("membraneTracerFlux") / "_summary";
             mkDir(base);
             mkDir(sumBase);
 
             // Per-patch time-series
             if (model_ == Model::solutePermeability)
             {
-                const fileName fp = base/"B_sigma_Robserved_vs_time.dat";
+                const fileName fp = base/"BT_sigmaT_RTobserved_vs_time.dat";
                 const bool existed = isFile(fp);
                 std::ofstream osf(fp.c_str(), std::ios::out | std::ios::app);
                 if (osf.good())
                 {
-                    if (!existed) osf << "# time[s]\tB\tsigmaUsed\tRobserved\n";
-                    const scalar sigmaUsed =
-                        (hasSigma_ ? sigma_ : sigmaFromUOrDefault1_(patch().index()));
-                    osf << runTime.value() << '\t' << B_ << '\t'
-                        << sigmaUsed << '\t' << Robserved_ << '\n';
+                    if (!existed) osf << "# time[s]\tBT\tsigmaTUsed\tRTobserved\n";
+                    const scalar sigmaTUsed =
+                        (hasSigmaT_ ? sigmaT_ : sigmaTFromUOrDefault1_(patch().index()));
+                    osf << runTime.value() << '\t' << BT_ << '\t'
+                        << sigmaTUsed << '\t' << RTobserved_ << '\n';
                 }
             }
             else
             {
-                const fileName fp = base/"Rint_vs_time.dat";
+                const fileName fp = base/"RTint_vs_time.dat";
                 const bool existed = isFile(fp);
                 std::ofstream osf(fp.c_str(), std::ios::out | std::ios::app);
                 if (osf.good())
                 {
-                    if (!existed) osf << "# time[s]\tRint\tRobserved\n";
-                    osf << runTime.value() << '\t' << Rint_ << '\t' << Robserved_ << '\n';
+                    if (!existed) osf << "# time[s]\tRTint\tRTobserved\n";
+                    osf << runTime.value() << '\t' << RTint_ << '\t' << RTobserved_ << '\n';
                 }
             }
 
@@ -771,62 +770,62 @@ void membraneSoluteFluxFvPatchScalarField::write(Ostream& os) const
 
             if (model_ == Model::solutePermeability)
             {
-                const fileName latest = sumBase/"B_sigma_latest.dat";
+                const fileName latest = sumBase/"BT_sigmaT_latest.dat";
                 if (newWriteTime)
                 {
                     std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::trunc);
                     if (osLatest.good())
-                        osLatest << "# time[s]\tpatch\tB\tsigmaUsed\tRobserved\n";
+                        osLatest << "# time[s]\tpatch\tBT\tsigmaTUsed\tRTobserved\n";
                     lastSummaryTimeIndexGlobal = runTime.timeIndex();
                 }
                 std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::app);
                 if (osLatest.good())
                 {
-                    const scalar sigmaUsed =
-                        (hasSigma_ ? sigma_ : sigmaFromUOrDefault1_(patch().index()));
+                    const scalar sigmaTUsed =
+                        (hasSigmaT_ ? sigmaT_ : sigmaTFromUOrDefault1_(patch().index()));
                     osLatest << runTime.value() << '\t' << patch().name() << '\t'
-                             << B_ << '\t' << sigmaUsed << '\t' << Robserved_ << '\n';
+                             << BT_ << '\t' << sigmaTUsed << '\t' << RTobserved_ << '\n';
                 }
 
-                const fileName snap = sumBase/("B_sigma_" + runTime.timeName() + ".dat");
+                const fileName snap = sumBase/("BT_sigmaT_" + runTime.timeName() + ".dat");
                 const bool existedSnap = isFile(snap);
                 std::ofstream osSnap(snap.c_str(), std::ios::out | std::ios::app);
                 if (osSnap.good())
                 {
                     if (!existedSnap)
-                        osSnap << "# time[s]\tpatch\tB\tsigmaUsed\tRobserved\n";
-                    const scalar sigmaUsed =
-                        (hasSigma_ ? sigma_ : sigmaFromUOrDefault1_(patch().index()));
+                        osSnap << "# time[s]\tpatch\tBT\tsigmaTUsed\tRTobserved\n";
+                    const scalar sigmaTUsed =
+                        (hasSigmaT_ ? sigmaT_ : sigmaTFromUOrDefault1_(patch().index()));
                     osSnap << runTime.value() << '\t' << patch().name() << '\t'
-                           << B_ << '\t' << sigmaUsed << '\t' << Robserved_ << '\n';
+                           << BT_ << '\t' << sigmaTUsed << '\t' << RTobserved_ << '\n';
                 }
             }
             else
             {
-                const fileName latest = sumBase/"Rint_latest.dat";
+                const fileName latest = sumBase/"RTint_latest.dat";
                 if (newWriteTime)
                 {
                     std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::trunc);
                     if (osLatest.good())
-                        osLatest << "# time[s]\tpatch\tRint\tRobserved\n";
+                        osLatest << "# time[s]\tpatch\tRTint\tRTobserved\n";
                     lastSummaryTimeIndexGlobal = runTime.timeIndex();
                 }
                 std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::app);
                 if (osLatest.good())
                 {
                     osLatest << runTime.value() << '\t' << patch().name() << '\t'
-                             << Rint_ << '\t' << Robserved_ << '\n';
+                             << RTint_ << '\t' << RTobserved_ << '\n';
                 }
 
-                const fileName snap = sumBase/("Rint_" + runTime.timeName() + ".dat");
+                const fileName snap = sumBase/("RTint_" + runTime.timeName() + ".dat");
                 const bool existedSnap = isFile(snap);
                 std::ofstream osSnap(snap.c_str(), std::ios::out | std::ios::app);
                 if (osSnap.good())
                 {
                     if (!existedSnap)
-                        osSnap << "# time[s]\tpatch\tRint\tRobserved\n";
+                        osSnap << "# time[s]\tpatch\tRTint\tRTobserved\n";
                     osSnap << runTime.value() << '\t' << patch().name() << '\t'
-                           << Rint_ << '\t' << Robserved_ << '\n';
+                           << RTint_ << '\t' << RTobserved_ << '\n';
                 }
             }
         }

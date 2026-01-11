@@ -57,6 +57,19 @@ volScalarField CA
     mesh
 );
 
+Info<< "Reading field CT\n" << endl;
+volScalarField CT
+(
+    IOobject
+    (
+        "CT",
+        runTime.timeName(),
+        mesh,
+        IOobject::MUST_READ,
+        IOobject::AUTO_WRITE
+    ),
+    mesh
+);
 
 #include "createPhi.H"
 
@@ -112,11 +125,22 @@ volScalarField Deff
         runTime.timeName(),
         mesh,
         IOobject::NO_READ,
-        IOobject::AUTO_WRITE
+        IOobject::NO_WRITE
     ),
     DAB  // initial value; will be updated each iteration below
 );
-
+volScalarField DTeff
+(
+    IOobject
+    (
+        "DTeff",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::NO_WRITE
+    ),
+    DT  // initial value; will be updated each iteration below
+);
 volVectorField coriolisSrc
 (
     IOobject

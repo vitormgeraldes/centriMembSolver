@@ -12,6 +12,7 @@ EXE_INC = \
     -I../src/transportModels/CAViscosity
 
 EXE_LIBS = \
+    -L$(FOAM_SITE_LIBBIN) \
     -lfiniteVolume \
     -lfvOptions \
     -lmeshTools \

@@ -1,2 +1,2 @@
 GamaPatchAvgTimeWindow.C
-LIB = $(FOAM_LIBBIN)/libGamaPatchAvgTimeWindow
+LIB = $(FOAM_SITE_LIBBIN)/libGamaPatchAvgTimeWindow

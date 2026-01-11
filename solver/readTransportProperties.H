@@ -25,7 +25,12 @@ dimensionedScalar DAB4("DAB4", dimensionSet(-4,14,-1,0,0,0,0), transportProperti
 // density (if you need it elsewhere)
 dimensionedScalar beta("beta", dimLength*dimLength*dimLength/dimMass, transportPropertiesDict.subDict("density"));
 dimensionedScalar rho0("rho0", dimDensity, transportPropertiesDict.subDict("density"));
+
+
+dimensionedScalar DT0("DT0", dimensionSet(0,2,-1,0,0,0,0), transportPropertiesDict);
 Info << "End readTransportProperties" << endl;
+
+
 
 
 // DAB field (solver owns this)
@@ -42,4 +47,17 @@ volScalarField DAB
     mesh,
     DAB0
 );
-
+// DAB field (solver owns this)
+volScalarField DT
+(
+    IOobject
+    (
+        "DT",
+         runTime.timeName(),
+         mesh,
+         IOobject::NO_READ,
+         IOobject::AUTO_WRITE
+    ),
+    mesh,
+    DT0
+);
