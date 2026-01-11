@@ -83,7 +83,7 @@ implement well established flux laws—Spiegler–Kedem, constant flux and
 target average flux for the solvent, and intrinsic rejection, solute
 permeability or observed rejection for the solute.  Diagnostic
 quantities such as observed rejection and concentration polarisation are
-computed automatically.
+computed automatically. As of the 2026 release, the solver has been extended to simulate a primary solute A and a passive tracer T with separate diffusivities and membrane flux models, enabling tracer-based validation experiments.
 
 The following sections present the governing equations (including
 viscous and osmotic effects), derive the robust Coriolis algorithm,
@@ -428,20 +428,18 @@ with coefficients \(\nu_0,\nu_1,\nu_2\) set in
 values at high concentrations.
 
 
-\subsection{Solute transport}
 
-The solute concentration field obeys an advection–diffusion equation:
-\begin{equation}
-	\frac{\partial C_A}{\partial t}
-	+ \nabla\cdot(C_A\mathbf{U})
-	= \nabla\cdot(D_{\mathrm{eff}}\nabla C_A),
-\end{equation}
-with \(D_{\mathrm{eff}} = D_{AB} + D_t\), where \(D_{AB}\) is the
-molecular diffusivity and \(D_t\) the turbulent contribution (if
-enabled).  Membrane boundary conditions impose fluxes as described in
-\S\ref{sec:bc-solute}.
+\subsection{Solute and tracer transport}
+
+In the current release, the solver solves two advective–diffusive transport equations: one for a primary solute concentration \(C_A\) and one for a passive tracer concentration \(C_T\). Both species are advected by the same velocity field \(\mathbf{U}\) but may have different diffusion coefficients.  The governing equations read
+\begin{align}
+  \frac{\partial C_A}{\partial t} + \nabla\cdot(C_A\mathbf{U}) &= \nabla\cdot(D_{A,\mathrm{eff}}\,\nabla C_A),\\[0.5ex]
+  \frac{\partial C_T}{\partial t} + \nabla\cdot(C_T\mathbf{U}) &= \nabla\cdot(D_{T,\mathrm{eff}}\,\nabla C_T),
+\end{align}
+where \(D_{A,\mathrm{eff}} = D_{AB}(C_A) + D_t\) is the effective diffusivity of the solute including the concentration–dependent molecular diffusivity \(D_{AB}\) and a turbulent contribution \(D_t\) (if enabled), and \(D_{T,\mathrm{eff}} = D_{T,0} + D_t\) is the effective diffusivity of the tracer with \(D_{T,0}\) constant and independent of concentration. Membrane boundary conditions for the solute and tracer are described in \S\ref{sec:bc-solute} and \S\ref{sec:bc-tracer}, respectively.
 
 \subsection{Osmotic pressure and flux definitions}
+
 
 Transmembrane transport is driven by hydrostatic
 \(\Delta p = p_f - p_p\) and osmotic \(\Delta\pi = \pi(C_{A,f}) -
@@ -651,7 +649,39 @@ The solver also outputs the observed rejection and concentration
 polarisation factor \(\Gamma=(C_w - C_{A,b})/C_{A,b}\) for post–
 processing.
 
+
+\subsection{Tracer flux boundary (\texttt{CT})}
+\label{sec:bc-tracer}
+The tracer boundary condition is analogous to the solute flux condition but uses distinct parameters.  Three models are provided:
+
+\paragraph{Intrinsic rejection model.}
+Assumes that a fraction \(R_{T,\mathrm{int}}\) of the tracer is rejected at
+the membrane such that the permeate concentration is
+\(C_{T,p} = (1 - R_{T,\mathrm{int}})\,C_{T,w}\).  A film balance for the tracer yields
+\[
+  k_T\,(C_{T,w} - C_{T,i}) = R_{T,\mathrm{int}}\,J_v\,C_{T,w},
+\]
+where \(k_T\) is the tracer mass–transfer coefficient and \(C_{T,i}\) the bulk tracer concentration adjacent to the membrane.  The tracer flux is \(J_{s,T} = J_v\,C_{T,p}\).  Dictionary entries are \texttt{model intrinsicRejection}, \texttt{RTint} and the reference tracer concentration \texttt{CTb} used for diagnostics.
+
+\paragraph{Tracer permeability model.}
+This option uses a Kedem–Katchalsky closure analogous to Eq.~\eqref{eq:js-s-k}, with a tracer permeability \(B_T\) and an optional tracer reflection coefficient \(\sigma_T\).  When \(\sigma_T\) is omitted, the reflection coefficient is inherited from the solvent boundary condition on \texttt{U}.  The model enforces
+\[
+  J_{s,T} = (1 - \sigma_T)\,J_v C_{T,w} + B_T(C_{T,w} - C_{T,p}),
+\]
+and computes an implied permeate concentration \(C_{T,p}\) such that \(J_{s,T} = J_v\,C_{T,p}\).  Dictionary keywords are \texttt{model solutePermeability}, \texttt{BT} and optionally \texttt{sigmaT}.
+
+\paragraph{Observed rejection model.}
+Analogous to the solute case, this option specifies a target observed tracer rejection \(R_{T,\mathrm{obs}}\) defined by
+\[
+  R_{T,\mathrm{obs}} = 1 - \frac{\langle J_v C_{T,p} \rangle}{\langle J_v \rangle\,C_{T,b}},
+\]
+where \(C_{T,b}\) is the reference bulk tracer concentration.  The solver iteratively adjusts \(R_{T,\mathrm{int}}\) until the observed rejection matches the target within tolerance.  Parameters are \texttt{RTobs}, \texttt{RTintMin}, \texttt{RTintMax}, \texttt{tol} and \texttt{maxIter}.  
+
+\paragraph{Diagnostics.}
+Per–face tracer flux \(J_{s,T}\), solvent flux \(J_v\) and permeate tracer concentration \(C_{T,p}\) are exposed via the patch fields \texttt{JsT}, \texttt{Jv} and \texttt{CTp}.  The solver writes the observed tracer rejection and concentration polarisation factor \(\Gamma_T = (C_{T,w}-C_{T,b})/C_{T,b}\) to the summary files for post–processing.
+
 \subsection{Membrane patch dictionaries}
+
 
 Tables~\ref{tab:membrane-solvent} and~\ref{tab:membrane-solute}
 summarise the principal dictionary entries for solvent and solute
@@ -700,6 +730,28 @@ numbers; only those shown as required must be provided.
   \end{tabular}
 \end{table}
 
+\begin{table}[h]
+  \centering
+  \caption{Summary of membrane tracer flux boundary entries.}
+  \label{tab:membrane-tracer}
+  \begin{tabular}{@{}llp{8cm}@{}}
+    \toprule
+    Key & Units & Description\\
+    \midrule
+    \texttt{model} & -- & \texttt{intrinsicRejection}, \texttt{solutePermeability} or \texttt{observedRejection}\\
+    \texttt{RTint} & -- & Intrinsic tracer rejection coefficient (intrinsicRejection)\\
+    \texttt{BT} & \si{m/s} & Tracer permeability (solutePermeability)\\
+    \texttt{sigmaT} & -- & Optional tracer reflection coefficient (overrides solvent BC)\\
+    \texttt{RTobs} & -- & Target observed tracer rejection (observedRejection)\\
+    \texttt{CTb} & \si{kg/m^3} & Reference bulk tracer concentration for diagnostics\\
+    \texttt{RTintMin}, \texttt{RTintMax} & -- & Bounds for inverse rejection search\\
+    \texttt{tol}, \texttt{maxIter} & -- & Tolerance and maximum iterations for secant/bisection\\
+    \texttt{UName} & -- & Name of velocity field (defaults to \texttt{U})\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
 % ===========================================================================
 
 
@@ -724,7 +776,7 @@ For readers familiar with C++, the main structure of
 	createMesh;
 	createControl;              // pimpleControl
 	createFields;               // U, p_rgh, CA, etc.
-	membraneFields;             // Js, Jv, CAp, Gama
+	membraneFields;             // Js, JsT, Jv, CAp, CTp, Gama, GamaT
 	updateTransportProperties;  // nu(CA), DAB(CA), rhok
 	
 	while (runTime.run())
@@ -751,9 +803,11 @@ For readers familiar with C++, the main structure of
 			}
 		}
 		
+		#include "CTEqn.H"
 		#include "pReconstruct.H"
 		#include "monitorConservation.H"
 		#include "Gama.H"
+		#include "GamaT.H"
 		#include "forces.H"
 		
 		runTime.write();
@@ -791,13 +845,7 @@ Field creation is handled in two main headers:
 	\texttt{constant/SRFProperties}. It also constructs the
 	turbulence model if required.
 	
-	\item \textbf{\texttt{membraneFields.H}} declares four additional
-	volume fields used for membrane diagnostics:
-	\texttt{Js} (solute flux), \texttt{Jv} (solvent flux),
-	\texttt{CAp} (permeate concentration) and \texttt{Gama} (a
-	dimensionless diagnostic \(\Gamma\)). All are created with
-	\texttt{AUTO\_WRITE}, so they are automatically written at
-	output times.
+	\item \textbf{\texttt{membraneFields.H}} declares seven additional volume fields used for membrane diagnostics.  These include \texttt{Js} and \texttt{JsT} (solute and tracer fluxes), \texttt{Jv} (solvent flux), \texttt{CAp} and \texttt{CTp} (permeate solute and tracer concentrations) and \texttt{Gama} and \texttt{GamaT} (dimensionless concentration polarisation factors for solute and tracer).  All diagnostic fields are created with \texttt{AUTO\_WRITE} so they are automatically written at output times.
 \end{itemize}
 
 The header \texttt{updateTransportProperties.H} is called once before
@@ -922,15 +970,16 @@ how well the discrete balance is satisfied. This file is the main tool
 to verify that the coupled flow--membrane scheme is globally
 conservative.
 
-\paragraph{\texttt{Gama.H}}
+\paragraph{\texttt{Gama.H} and \texttt{GamaT.H}}
 
 As described above, \texttt{Gama.H} maps the per--face diagnostic
-\(\Gamma\) from the membrane boundary condition into the volume field
-\texttt{Gama}. This is done patch by patch on the membrane boundaries,
-with simple consistency checks (same number of faces) to avoid copying
-errors.
+\(\Gamma\) from the membrane solute boundary condition into the volume field
+\texttt{Gama}.  In the 2026 release, a companion header \texttt{GamaT.H}
+performs the analogous mapping for the tracer polarisation factor \texttt{GamaT}.
+This is done patch by patch on the membrane boundaries, with simple consistency checks (same number of faces) to avoid copying errors.
 
 \paragraph{\texttt{forces.H}}
+
 
 Finally, \texttt{forces.H} computes two auxiliary vector fields:
 
