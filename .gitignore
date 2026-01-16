@@ -89,13 +89,19 @@ log.*
 **/*.dep
 **/lnInclude/
 
-# --- LaTeX build artefacts ---
+# --- LaTeX build artefacts (ignore) ---
 doc/*.aux
 doc/*.out
 doc/*.toc
 doc/*.synctex.gz
 doc/*.log
+
+# --- Documentation policy ---
+doc/*.tex
 doc/*.pdf
+!doc/userGuide.pdf
+
+
 /tutorials/**/constant/polyMesh/
 /tutorials/**/constant/polyMesh/
 
