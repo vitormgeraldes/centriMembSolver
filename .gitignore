@@ -98,3 +98,6 @@ doc/*.log
 doc/*.pdf
 /tutorials/**/constant/polyMesh/
 /tutorials/**/constant/polyMesh/
+
+# Documentation sources (do not track)
+doc/*.tex
