@@ -76,6 +76,7 @@ int main(int argc, char *argv[])
 
     #include "createMesh.H"
 
+    // Create all fields (including optional tracer) in a single header
     #include "createFields.H"
 
     // PIMPLE controller (v2506)
@@ -137,6 +138,7 @@ int main(int argc, char *argv[])
         #include "Gama.H"
         #include "GamaT.H"
 
+        //#include "Rosby.H"
         runTime.write();
 
         runTime.printExecutionTime(Info);

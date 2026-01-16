@@ -2,14 +2,19 @@
 % centriMembSolver — Theory, Implementation and Usage Guide
 %
 % This document serves as a combined user and developer guide for
-% ``centriMembSolver``, an OpenFOAM® based solver developed for rotating
-% membrane systems.  It is written in the spirit of the RheoTool
-% documentation: concise, technically precise and self‑contained.  The
-% solver couples hydrodynamics, solute transport, centrifugal
-% acceleration and osmotic effects across semi‑permeable boundaries.  A
-% robust semi‑implicit algorithm for the Coriolis term is described in
-% detail along with the membrane boundary conditions and overall solver
-% architecture.
+% ``centriMembSolver``, an OpenFOAM®-based solver developed for the numerical
+% simulation of rotating membrane systems. The documentation is intended to be
+% concise, technically precise, and self-contained.
+%
+% The solver couples incompressible hydrodynamics, solute transport,
+% centrifugal acceleration, Coriolis effects, and osmotic phenomena across
+% semi-permeable membrane boundaries. A robust semi-implicit formulation for
+% the Coriolis term is described in detail, together with the membrane boundary
+% conditions, numerical algorithms, and overall solver architecture.
+%
+% The manual is intended for advanced users and developers with prior
+% experience in OpenFOAM and continuum transport phenomena.
+% -----------------------------------------------------------------------------
 
 \documentclass[11pt,a4paper]{article}
 
@@ -29,36 +34,97 @@
 \geometry{margin=25mm}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{1ex plus 0.5ex minus 0.2ex}
-\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue}
+
+\hypersetup{
+	colorlinks=true,
+	linkcolor=blue,
+	urlcolor=blue,
+	citecolor=blue
+}
 
 % ------------------------ Title and meta information ------------------------
 \title{\bfseries centriMembSolver — Theory, Implementation and Usage Guide\\[1ex]
-\large A combined user and developer manual for rotating membrane simulations}
-\author{SmartFreez R\&D Group\\University of Lisbon, 2025}
+	\large A combined user and developer manual for rotating membrane simulations}
+
+\author{
+	Vitor Geraldes\\
+	Department of Chemical Engineering\\
+	Instituto Superior Técnico — Universidade de Lisboa\\
+	\texttt{vitor.geraldes@tecnico.ulisboa.pt}
+}
+
 \date{\today}
 
 \begin{document}
+	
+	% ======================================================================
+	% Page 1 — Title page
+	% ======================================================================
+	\begin{titlepage}
+		\maketitle
+		\thispagestyle{empty}
+	\end{titlepage}
+	
+	% ======================================================================
+	% Page 2 — License and trademark notice
+	% ======================================================================
+	\clearpage
+	\thispagestyle{plain}
+	
+	\section*{License and trademark notice}
+	
+	\textbf{Software.}
+	\texttt{centriMembSolver} is distributed under the GNU General Public License
+	version 3 (GPLv3) or later. See the \texttt{LICENSE} file distributed with the
+	source code.
+	
+	\medskip
+	\textbf{Documentation.}
+	This manual is licensed under the Creative Commons Attribution 4.0
+	International License (CC BY 4.0), unless stated otherwise.
+	
+	\medskip
+	\textbf{Trademark.}
+	OpenFOAM\textsuperscript{\textregistered} is a registered trademark of
+	OpenCFD Limited (ESI Group). This work is not affiliated with, endorsed by,
+	or sponsored by OpenCFD Limited.
+	
+	% ======================================================================
+	% Page 3 — Abstract
+	% ======================================================================
+	\clearpage
+	\thispagestyle{plain}
+	
+	\section*{Abstract}
+	\addcontentsline{toc}{section}{Abstract}
+	
+	\noindent
+	\texttt{centriMembSolver} is a finite–volume solver for coupled solvent and
+	solute transport through rotating membranes. Developed within an academic
+	research programme in rotating membrane filtration, it extends
+	\texttt{bousinesqPimpleFOAM} to include solute transport and semi-permeable membrane boundary conditions,
+	concentration-dependent viscosity, and a numerically robust semi-implicit
+	treatment of the Centrifugal and Coriolis forces. This guide documents the underlying theory,
+	the implementation of membrane flux models, and the overall solver
+	architecture. A worked example, \emph{rotatingSlit}, is included to
+	illustrate case setup and post-processing. The document is intended both
+	for end-users running membrane simulations and for developers wishing to
+	extend the solver to new flux laws or multi-physics couplings.
+	
+	% ======================================================================
+	% Page 4 — Table of contents
+	% ======================================================================
+	\clearpage
+	\thispagestyle{plain}
+	\tableofcontents
+	
+	% ======================================================================
+	% Page 5+ — Main content
+	% ======================================================================
+	\clearpage
+	
+	% ======================================================================
 
-\maketitle
-
-\begin{abstract}
-\noindent
-\texttt{centriMembSolver} is a finite–volume solver for coupled solvent and
-solute transport through rotating membranes.  Developed as part of the
-SmartFreez research programme, it extends \texttt{pimpleFoam} to include
-semi‑permeable membrane boundary conditions, concentration dependent
-viscosity and a numerically robust semi‑implicit treatment of the Coriolis
-force.  This guide documents the underlying theory, the
-implementation of membrane flux models and the overall solver
-architecture.  A worked example, \emph{rotatingSlit}, is included to
-illustrate setup and post–processing.  The document is intended both for
-end–users running membrane simulations and for developers wishing to
-extend the solver to new flux laws or multi–physics couplings.
-\end{abstract}
-
-\tableofcontents
-
-% ===========================================================================
 \section{Introduction}
 
 Rotating membrane systems combine fluid flow, solute transport and
@@ -1301,7 +1367,6 @@ temperature–dependent coefficients.
 \begin{enumerate}
 	\item Spiegler, K. S. \& Kedem, O. (1966). Thermodynamics of hyperfiltration (reverse osmosis): criteria for efficient membranes. \emph{Desalination}, 1, 311–326.
 	\item Wu, J. J. (2019). On the application of the Spiegler–Kedem model to forward osmosis. \emph{BMC Chemical Engineering}, 1, 15.  (Discusses how the S–K model allows deviation from ideal semi–permeability.)
-	\item Cayley, A. (1846). A theorem on skew–symmetric matrices.  Summarised in the definition of the Cayley transform: for a skew–symmetric matrix \(A\), the map \((I - A)(I + A)^{-1}\) yields an orthogonal matrix.
 	\item Coriolis force formula.  The acceleration of a mass in a rotating frame includes a term \(-2\,\boldsymbol{\Omega}\times\mathbf{v}\) acting orthogonal to the velocity.
 \end{enumerate}
 

@@ -1,44 +1,51 @@
-// Gama.H — export Γ from membraneSoluteFlux BC into volScalarField Gama
-
-Info<< "Compute Gama (export to volScalarField)\n";
+// GamaT.H — export Γ from membraneTracerFlux BC into volScalarField GamaT
+// The tracer polarization is only available when solveTracer=true
+if (solveTracer)
 {
-    const fvMesh& mesh_ = GamaT.mesh();
+    // Access the tracer polarization field from the autoPtr
+    volScalarField& GamaT = GamaTPtr();
 
-    // One-time: cache pointer to CA field and membrane patch ids
-    static bool init = false;
-    static const volScalarField* CTfieldPtr_ = nullptr;  // pointer to field "CA"
-    static List<label> memPatchIds;
-
-    if (!init)
+    Info<< "Compute GamaT (export to volScalarField)\n";
     {
-        CTfieldPtr_ = &mesh_.lookupObject<volScalarField>("CT");
+        const fvMesh& mesh_ = GamaT.mesh();
 
-        const fvBoundaryMesh& bnd = mesh_.boundary();
-        DynamicList<label> ids; ids.reserve(bnd.size());
-        forAll(bnd, patchI)
+        // One-time: cache pointer to CT field and membrane patch ids
+        static bool init = false;
+        static const volScalarField* CTfieldPtr_ = nullptr;
+        static List<label> memPatchIds;
+
+        if (!init)
         {
-            const auto& CTpatch = CTfieldPtr_->boundaryField()[patchI];
-            if (isA<Foam::membraneTracerFluxFvPatchScalarField>(CTpatch))
-                ids.append(patchI);
+            // lookup the tracer field (must exist because solveTracer=true)
+            CTfieldPtr_ = &mesh_.lookupObject<volScalarField>("CT");
+
+            const fvBoundaryMesh& bnd = mesh_.boundary();
+            DynamicList<label> ids; ids.reserve(bnd.size());
+            forAll(bnd, patchI)
+            {
+                const auto& CTpatch = CTfieldPtr_->boundaryField()[patchI];
+                if (isA<Foam::membraneTracerFluxFvPatchScalarField>(CTpatch))
+                    ids.append(patchI);
+            }
+            memPatchIds.transfer(ids);
+            init = true;
         }
-        memPatchIds.transfer(ids);
-        init = true;
-    }
 
-    // Export Γ only on membrane patches (vectorized assignment)
-    for (const label patchI : memPatchIds)
-    {
-        // src: membrane BC on CA
-        const auto& CTpatch = CTfieldPtr_->boundaryField()[patchI];
-        const auto& bc = refCast<const Foam::membraneTracerFluxFvPatchScalarField>(CTpatch);
-        const scalarField& GTp = bc.GamaT();     // per-face Γ (already filled by BC)
-
-        // dst: Gama field on the same patch
-        fvPatchScalarField& pfG = GamaT.boundaryFieldRef()[patchI];
-
-        if (GTp.size() == pfG.size())           // quick guard
+        // Export Γ only on membrane patches (vectorized assignment)
+        for (const label patchI : memPatchIds)
         {
-            pfG == GTp;                         // vectorized copy
+            // src: membrane BC on tracer (CT)
+            const auto& CTpatch = CTfieldPtr_->boundaryField()[patchI];
+            const auto& bc = refCast<const Foam::membraneTracerFluxFvPatchScalarField>(CTpatch);
+            const scalarField& GTp = bc.GamaT();     // per-face Γ (already filled by BC)
+
+            // dst: GamaT field on the same patch
+            fvPatchScalarField& pfG = GamaT.boundaryFieldRef()[patchI];
+
+            if (GTp.size() == pfG.size())           // quick guard
+            {
+                pfG == GTp;                         // vectorized copy
+            }
         }
     }
 }

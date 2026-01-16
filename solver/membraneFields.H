@@ -1,7 +1,6 @@
-Info<< "Reading membrane related fields \n" << endl;
-//#include "fvcVolumeIntegrate.H"
+Info<< "Creating membrane related fields" << endl;
 
-
+// Solute flux through membrane [kg/(m^2 s)]
 volScalarField Js
 (
     IOobject
@@ -15,19 +14,8 @@ volScalarField Js
     mesh,
     dimensionedScalar("Js", dimensionSet(1,-2,-1,0,0,0,0), 0.0)
 );
-volScalarField JsT
-(
-    IOobject
-    (
-        "JsT",
-        runTime.timeName(),
-        mesh,
-        IOobject::NO_READ,
-        IOobject::AUTO_WRITE
-    ),
-    mesh,
-    dimensionedScalar("JsT", dimensionSet(1,-2,-1,0,0,0,0), 0.0)
-);
+
+// Volumetric flux through membrane [m/s]
 volScalarField Jv
 (
     IOobject
@@ -42,44 +30,32 @@ volScalarField Jv
     dimensionedScalar("Jv", dimensionSet(0,1,-1,0,0,0,0), 0.0)
 );
 
+// Solute concentration at the permeate side [kg/m^3]
 volScalarField CAp
 (
-    IOobject("CAp", runTime.timeName(),
-    mesh,
-    IOobject::NO_READ,
-    IOobject::AUTO_WRITE
+    IOobject
+    (
+        "CAp",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::AUTO_WRITE
     ),
     mesh,
-    dimensionedScalar("CAp", dimensionSet(1,-3,0,0,0,0,0), 0.0) // kg/m3
-);
-volScalarField CTp
-(
-    IOobject("CTp", runTime.timeName(),
-    mesh,
-    IOobject::NO_READ,
-    IOobject::AUTO_WRITE
-    ),
-    mesh,
-    dimensionedScalar("CTp", dimensionSet(1,-3,0,0,0,0,0), 0.0) // kg/m3
+    dimensionedScalar("CAp", dimensionSet(1,-3,0,0,0,0,0), 0.0)
 );
 
+// Solute polarization factor at membrane [dimensionless]
 volScalarField Gama
 (
-    IOobject("Gama", runTime.timeName(),
-    mesh,
-    IOobject::NO_READ,
-    IOobject::AUTO_WRITE
+    IOobject
+    (
+        "Gama",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::AUTO_WRITE
     ),
     mesh,
-    dimensionedScalar("Gama", dimensionSet(0,0,0,0,0,0,0), 0.0) // kg/m3
-);
-volScalarField GamaT
-(
-    IOobject("GamaT", runTime.timeName(),
-    mesh,
-    IOobject::NO_READ,
-    IOobject::AUTO_WRITE
-    ),
-    mesh,
-    dimensionedScalar("GamaT", dimensionSet(0,0,0,0,0,0,0), 0.0) // kg/m3
+    dimensionedScalar("Gama", dimless, 0.0)
 );
