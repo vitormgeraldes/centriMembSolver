@@ -1,0 +1,23 @@
+FoamFile
+{
+	version	2.0;
+	format	ascii;
+	class	dictionary;
+	location	"system";
+	object	surfacePatchDict;
+}
+geometry
+{
+	model.stl
+	{
+		type	triSurfaceMesh;
+	}
+}
+surfaces
+{
+	model.stl
+	{
+		type	autoPatch;
+		featureAngle	60;
+	}
+}

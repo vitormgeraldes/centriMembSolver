@@ -1,0 +1,31 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 | OpenFOAM: The Open Source CFD Toolbox           |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      refineMeshDict;
+}
+/* in system/refineMeshDict */
+set             membraneBand;              // nome do cellSet com as células a refinar
+coordinateSystem global;         // usar o sistema de coordenadas global
+globalCoeffs                        // direcções associadas aos eixos globais
+{
+    tan1        (1 0 0);          // eixo x
+    tan2        (0 1 0);          // eixo y
+}
+directions (tan1 tan2 normal);   // subdividir nas direcções tan1 e tan2
+useHexTopology  no;
+geometricCut    yes;
+writeMesh       no;
+
+
+
+useHexTopology  yes;
+maxGlobalCells  50000000;
+maxLocalCells   8000000;
+
+correctFluxes   ( phi );            // adiciona aqui outros fluxos se existirem
+dumpLevel       true;
