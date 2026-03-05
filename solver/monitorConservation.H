@@ -3,6 +3,12 @@
   Requisitos (fatal se faltar): CA, U, Js, Jv, CAp, phi
   Opcional: Deff (para fluxo difusivo em paredes)
   Output: <rootCase>/postProcessing/conservation/cons.dat
+
+  Implementação:
+  - Convecção do soluto medida com fvc::flux(phi,CA,"div(phi,CA)") para ficar
+    CONSISTENTE com o scheme já existente em fvSchemes.
+  - Mantém exatamente as MESMAS colunas no output (não adiciona nada).
+  - Mantém o cache (como no teu original) — só mexo no mínimo pedido.
 \*---------------------------------------------------------------------------*/
 
 #include "fvc.H"
@@ -86,15 +92,12 @@ static const Foam::word DIFF_FIELD_NAME("Deff");
     scalar Qnet  = 0.0;
     scalar Qin   = 0.0;
 
-    autoPtr<surfaceScalarField> CAfPtr
+    // ===== Fluxo convectivo DISCRETO do soluto (consistente com div(phi,CA)) =====
+    surfaceScalarField phiCA
     (
-        new surfaceScalarField
-        (
-            IOobject("CAf", time_.timeName(), mesh_, IOobject::NO_READ, IOobject::NO_WRITE),
-            fvc::interpolate(CA)
-        )
+        IOobject("phiCA", time_.timeName(), mesh_, IOobject::NO_READ, IOobject::NO_WRITE),
+        fvc::flux(phi, CA, "div(phi,CA)")
     );
-    const surfaceScalarField& CAf = CAfPtr();
 
     const polyBoundaryMesh& pbm = mesh_.boundaryMesh();
 
@@ -136,15 +139,14 @@ static const Foam::word DIFF_FIELD_NAME("Deff");
             mMem += gSum(JsP * A);                      // [kg/s]
         }
 
-        // ---- Convecção genérica (não-membrana)
+        // ---- Convecção genérica (não-membrana) — agora via phiCA (discreto)
         if (!memVol && !memSol)
         {
-            const scalar md =
-                gSum(phi.boundaryField()[pid] * CAf.boundaryField()[pid]); // [kg/s]
+            const scalar md = gSum(phiCA.boundaryField()[pid]); // [kg/s], saída +
             if (md >= 0) mOut += md; else mIn += -md;
         }
 
-        // ---- Difusão: só em paredes (pType == "wall")
+        // ---- Difusão: só em paredes (pType == "wall") — mantido igual ao original
         if (!memVol && !memSol && haveDeff && pType == "wall")
         {
             const scalarField& Dp = Dptr->boundaryField()[pid];          // [m2/s]

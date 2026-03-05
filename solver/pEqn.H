@@ -1,3 +1,4 @@
+Info<< "Correcting pressure" << endl;
 {
     volScalarField rAU("rAU", 1.0/UEqn.A());
     surfaceScalarField rAUf("rAUf", fvc::interpolate(rAU));
@@ -23,7 +24,7 @@
         (
             fvm::laplacian(rAUf, p_rgh) == fvc::div(phiHbyA)
         );
-
+        Info<< "Solving p_rghEqn" << endl;
         p_rghEqn.solve(p_rgh.select(pimple.finalInnerIter()));
 
         if (pimple.finalNonOrthogonalIter())

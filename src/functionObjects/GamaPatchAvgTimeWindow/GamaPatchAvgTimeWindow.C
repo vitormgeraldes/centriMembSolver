@@ -38,8 +38,13 @@ static inline fileName caseRoot(const Time& T)
 {
     fileName p = T.rootPath()/T.caseName();
 
-    auto isProc = [](const word& w){ return w.size() >= 9 && w.substr(0,9) == "processor"; };
-    auto isTime = [](const word& w){
+    auto isProc = [](const word& w)
+    {
+        return w.size() >= 9 && w.substr(0,9) == "processor";
+    };
+
+    auto isTime = [](const word& w)
+    {
         if (w.empty()) return false;
         bool hasDigit = false;
         for (char c : std::string(w))
@@ -54,7 +59,10 @@ static inline fileName caseRoot(const Time& T)
     {
         const word tail = p.name();
         if (isProc(tail) || isTime(tail) || tail == "constant" || tail == "system")
-        { p = p.path(); continue; }
+        {
+            p = p.path();
+            continue;
+        }
         break;
     }
     return p;
@@ -77,11 +85,15 @@ GamaPatchAvgTimeWindow::GamaPatchAvgTimeWindow
     timeWindow_(readScalar(dict.lookup("timeWindow"))),
     masterOnly_(dict.lookupOrDefault<Switch>("masterOnly", true)),
     patchi_(-1),
-    W_(0.0), S1_(0.0), S2_(0.0),
+    Wm_(0.0), Sm_(0.0),
+    Wcv_(0.0), Scv_(0.0),
+    bufferMean_(),
+    bufferCV_(),
     outPath_(""),
     kpiPath_(""),
-    wroteHeader_(false),
-    lastInstAvg_(0.0)
+    lastInstMeanS_(0.0),
+    lastInstStdS_(0.0),
+    lastInstCVs_(0.0)
 {
     if (timeWindow_ <= SMALL)
     {
@@ -118,47 +130,66 @@ GamaPatchAvgTimeWindow::GamaPatchAvgTimeWindow
     }
 }
 
-// compute area-weighted average over patch (global via gSum)
-scalar GamaPatchAvgTimeWindow::patchAreaAverage(const volScalarField& f) const
+// compute area-weighted mean and std over patch (global via gSum)
+void GamaPatchAvgTimeWindow::patchAreaMeanStd
+(
+    const volScalarField& f,
+    scalar& mean,
+    scalar& stdS
+) const
 {
     const fvPatch& p = this->mesh_.boundary()[patchi_];
     const scalarField& vals = f.boundaryField()[patchi_];
-    const scalarField& Af = p.magSf();
+    const scalarField& Af   = p.magSf();
 
-    const scalar num = gSum(vals * Af);
-    const scalar den = gSum(Af);
-    return den > SMALL ? num/den : 0.0;
+    const scalar A  = gSum(Af);
+    const scalar m1 = (A > SMALL) ? gSum(vals*Af)/A : 0.0;
+    const scalar m2 = (A > SMALL) ? gSum(vals*vals*Af)/A : 0.0;
+
+    const scalar var = max(m2 - m1*m1, scalar(0));
+    mean = m1;
+    stdS = std::sqrt(var);
 }
 
-void GamaPatchAvgTimeWindow::pushSample(scalar dt, scalar value)
+void GamaPatchAvgTimeWindow::pushSample
+(
+    std::deque<Sample>& buf,
+    scalar& W,
+    scalar& S,
+    scalar dt,
+    scalar value
+)
 {
     if (dt <= SMALL) return;
-    buffer_.push_back({dt, value});
-    W_  += dt;
-    S1_ += value * dt;
-    S2_ += value * value * dt;
+    buf.push_back({dt, value});
+    W += dt;
+    S += value * dt;
 }
 
-void GamaPatchAvgTimeWindow::trimWindow()
+void GamaPatchAvgTimeWindow::trimWindow
+(
+    std::deque<Sample>& buf,
+    scalar& W,
+    scalar& S
+)
 {
-    while (W_ - timeWindow_ > SMALL && !buffer_.empty())
+    while (W - timeWindow_ > SMALL && !buf.empty())
     {
-        scalar excess = W_ - timeWindow_;
-        Sample& front = buffer_.front();
+        scalar excess = W - timeWindow_;
+        Sample& front = buf.front();
+
         if (front.dt <= excess + SMALL)
         {
-            W_  -= front.dt;
-            S1_ -= front.value * front.dt;
-            S2_ -= front.value * front.value * front.dt;
-            buffer_.pop_front();
+            W -= front.dt;
+            S -= front.value * front.dt;
+            buf.pop_front();
         }
         else
         {
             const scalar cut = excess;
             front.dt -= cut;
-            W_  -= cut;
-            S1_ -= front.value * cut;
-            S2_ -= front.value * front.value * cut;
+            W -= cut;
+            S -= front.value * cut;
         }
     }
 }
@@ -173,14 +204,25 @@ bool GamaPatchAvgTimeWindow::execute()
     if (!have) return true;
 
     const volScalarField& vf = mesh.lookupObject<volScalarField>(fieldName_);
-    const scalar areaAvg = patchAreaAverage(vf);
-    lastInstAvg_ = areaAvg;    // store for master-only write
+
+    scalar meanS = 0.0;
+    scalar stdS  = 0.0;
+    patchAreaMeanStd(vf, meanS, stdS);
+
+    lastInstMeanS_ = meanS;
+    lastInstStdS_  = stdS;
+    lastInstCVs_   = (mag(meanS) > SMALL) ? (stdS/meanS) : 0.0;
 
     scalar dt = mesh.time().deltaTValue();
     reduce(dt, minOp<scalar>());
 
-    pushSample(dt, areaAvg);
-    trimWindow();
+    // moving window means
+    pushSample(bufferMean_, Wm_,  Sm_,  dt, meanS);
+    trimWindow(bufferMean_, Wm_,  Sm_);
+
+    pushSample(bufferCV_,   Wcv_, Scv_, dt, lastInstCVs_);
+    trimWindow(bufferCV_,   Wcv_, Scv_);
+
     return true;
 }
 
@@ -211,44 +253,43 @@ bool GamaPatchAvgTimeWindow::write()
         {
             Warning<< "Failed to open output file: " << outPath_ << nl;
         }
+
         out_->precision(10);
         if (!existed || sz == 0)
         {
             (*out_) << "# Patch: " << patchName_ << nl
                     << "# Field: " << fieldName_ << nl
                     << "# timeWindow(s): " << timeWindow_ << nl
-                    << "# Columns: Time\tareaAverage(" << fieldName_ << "@"
-                    << patchName_ << ")\twinMean\twinVar\twinStd" << nl;
+                    << "# Columns: Time\tmeanS\tstdS\tCVs\twinMean(meanS)\twinMean(CVs)" << nl;
             out_->flush();
         }
     }
 
-    const scalar inst = lastInstAvg_;
     const scalar tNow = T.value();
 
-    scalar mean=0, var=0, stdv=0;
-    const bool haveWin = (W_ > SMALL);
-    if (haveWin)
-    {
-        mean = S1_/W_;
-        const scalar m2 = S2_/W_ - mean*mean;
-        var  = m2 > 0 ? m2 : 0.0;
-        stdv = std::sqrt(var);
-    }
+    const scalar instMeanS = lastInstMeanS_;
+    const scalar instStdS  = lastInstStdS_;
+    const scalar instCVs   = lastInstCVs_;
+
+    const bool haveWinM  = (Wm_  > SMALL);
+    const bool haveWinCV = (Wcv_ > SMALL);
+
+    const scalar winMeanM  = haveWinM  ? (Sm_/Wm_)   : instMeanS;
+    const scalar winMeanCV = haveWinCV ? (Scv_/Wcv_) : instCVs;
 
     out_->setf(std::ios::scientific, std::ios::floatfield);
-    (*out_) << tNow << '\t' << inst << '\t';
-    if (haveWin) (*out_) << mean << '\t' << var << '\t' << stdv << nl;
-    else         (*out_) << "n/a\tn/a\tn/a" << nl;
+    (*out_) << tNow << '\t'
+            << instMeanS << '\t' << instStdS << '\t' << instCVs << '\t'
+            << winMeanM  << '\t' << winMeanCV << nl;
     out_->flush();
 
-    // write KPI (overwrite)
+    // KPI = window-mean of CVs if available, else instantaneous CVs
     std::ofstream kpi(kpiPath_.c_str(), std::ios::out | std::ios::trunc);
     if (kpi.good())
     {
         kpi.setf(std::ios::scientific);
         kpi.precision(10);
-        kpi << (haveWin ? mean : inst) << '\n';
+        kpi << winMeanCV << '\n';
         kpi.flush();
     }
     else

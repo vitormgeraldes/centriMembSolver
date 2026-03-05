@@ -6,85 +6,31 @@
 |    \\/     Manipulation   |                                                 |
 \*---------------------------------------------------------------------------*/
 /*  Derived from OpenFOAM® v2506
- *  Copyright (C) 2011-2017  OpenFOAM Foundation
- *  Copyright (C) 2021       OpenCFD Ltd.
  *
  *  Modifications:
- *      by Vítor Geraldes, University of Lisbon, 2025
+ *      by Vítor Geraldes, University of Lisbon, 2025-2026
  *
- *  License:
- *      This file is distributed under the terms of the GNU General Public License
- *      as published by the Free Software Foundation; either version 3 of the
- *      License, or (at your option) any later version.
- *
- *  Disclaimer:
- *      Independent downstream extension compatible with OpenFOAM® v2506.
- *      Not part of, endorsed by, or affiliated with OpenCFD Ltd.,
- *      the OpenFOAM Foundation, or ESI Group.
+ *  License: GPLv3 (or later)
  */
 /*---------------------------------------------------------------------------*\
     GamaPatchAvgTimeWindow
     -----------------------
-    Function object for computing the time-windowed, area-weighted average of a
-    scalar field over a specified boundary patch.
+    Function object for computing:
+      (i)  instantaneous area-weighted patch mean, meanS(t)
+      (ii) instantaneous area-weighted spatial coefficient of variation on the patch,
+           CVs(t) = stdS(t)/meanS(t)
+      (iii) time-windowed (moving) mean of meanS(t) and CVs(t)
 
-    Maintains a moving integration window of length “timeWindow”, continuously
-    updating the average and variance using time-weighted accumulation.
-    Outputs are written to:
-        • postProcessing/<outputName>/areaAvg_timeWindow.dat
-        • postProcessing/KPI/Gama_<patch>.txt
+    The time window is an integration window of length "timeWindow" using
+    time-step weighting (dt).
 
-    KEY FEATURES
-    -------------
-      • Parallel-safe (uses MPI reductions, no blocking barriers)
-      • Master-only or per-rank output selectable
-      • Automatic directory creation under postProcessing/
-      • Reports instantaneous, window-mean, variance, and standard deviation
-      • Simple KPI file for external monitoring or control feedback
+    Outputs:
+      - postProcessing/<outputName>/<fileName>
+      - postProcessing/KPI/Gama_<patch>.txt   (KPI = winMean(CVs))
 
-    EXAMPLE (system/controlDict)
-    ----------------------------
-        functions
-        {
-            GamaPatchAvgTimeWindow1
-            {
-                type        GamaPatchAvgTimeWindow;
-                libs        ("libGamaPatchAvgTimeWindow.so");
-
-                patchName   membraneB;        // target patch
-                fieldName   Gama;             // volScalarField to average
-                timeWindow  15;               // window width [s]
-
-                masterOnly  true;             // only master writes
-                writeControl writeTime;
-                writeInterval 1;
-
-                outputName  Gama_membrane_avgWin;
-                fileName    areaAvg_timeWindow.dat;
-            }
-        }
-
-    OUTPUT FORMAT
-    --------------
-        # Patch: membraneB
-        # Field: Gama
-        # timeWindow(s): 15
-        # Columns: Time   areaAverage(Gama@membraneB)   winMean   winVar   winStd
-
-    UNITS
-    -----
-        Field value  : same as input volScalarField
-        Time         : [s]
-
-    NOTES
-    -----
-        • Uses gSum() for distributed patch integration
-        • No dependency on collated fileHandler
-        • Safe under decomposePar / reconstructPar workflows
-        • Suitable for steady-state or transient runs
-
+    Columns:
+      Time    meanS    stdS    CVs    winMean(meanS)    winMean(CVs)
 \*---------------------------------------------------------------------------*/
-
 
 #ifndef GamaPatchAvgTimeWindow_H
 #define GamaPatchAvgTimeWindow_H
@@ -117,22 +63,33 @@ class GamaPatchAvgTimeWindow
 
     // --- internal state ---
     label  patchi_;
-    scalar W_, S1_, S2_;
-    std::deque<Sample> buffer_;
+
+    // moving window means (time-weighted)
+    scalar Wm_, Sm_;           // for meanS
+    scalar Wcv_, Scv_;         // for CVs
+    std::deque<Sample> bufferMean_;
+    std::deque<Sample> bufferCV_;
 
     // --- file output ---
     autoPtr<OFstream> out_;
     fileName outPath_;
     fileName kpiPath_;
-    bool wroteHeader_;
 
-    // --- last instantaneous global average (from execute) ---
-    scalar lastInstAvg_;
+    // --- last instantaneous values (computed in execute) ---
+    scalar lastInstMeanS_;
+    scalar lastInstStdS_;
+    scalar lastInstCVs_;
 
-    // --- internal helpers ---
-    scalar patchAreaAverage(const volScalarField& f) const;
-    void pushSample(scalar dt, scalar value);
-    void trimWindow();
+    // --- helpers ---
+    void patchAreaMeanStd
+    (
+        const volScalarField& f,
+        scalar& mean,
+        scalar& stdS
+    ) const;
+
+    void pushSample(std::deque<Sample>& buf, scalar& W, scalar& S, scalar dt, scalar value);
+    void trimWindow(std::deque<Sample>& buf, scalar& W, scalar& S);
 
 public:
     TypeName("GamaPatchAvgTimeWindow");
