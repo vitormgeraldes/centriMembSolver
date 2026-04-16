@@ -1,0 +1,73 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2506                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       volScalarField;
+    location    "0";
+    object      CA;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+#include "./constant/simulationConditions"
+dimensions      [1 -3 0 0 0 0 0];
+
+internalField   uniform $CT0;
+
+boundaryField
+{
+    membrane
+    {
+        // type            membraneTracerFlux;
+        // model           observedRejection;
+        // RTobs           $RTobs;
+        // UName           U;
+        // CT0             $CT0;
+        // value           uniform 0;
+
+            // type    membraneTracerFlux;
+            // model   solutePermeability;
+            // BT       1e-20;          // tracer permeability [m/s]
+            // sigmaT   1.0;           // reflection coefficient [-] (optional)
+            // CTb      $CT0;           // reference concentration [kg/m3]
+            // value    uniform 0;
+
+            type    membraneTracerFlux;
+            model   intrinsicRejection;
+            RTint   1.0;           // trace intrinsic rejection [-]
+            CTb     $CT0;           // bulk reference [kg/m3] for diagnostics
+            value   uniform 0;
+
+    }
+    inlet
+    {
+        type            inletOutlet;
+        inletValue      uniform $CT0;
+        value           uniform $CT0;
+    }
+    yMinus
+    {
+        type            cyclic;
+    }
+    yPlus
+    {
+        type            cyclic;
+    }
+    zMinus
+    {
+        type            cyclic;
+    }
+    zPlus
+    {
+        type            cyclic;
+    }
+}
+
+
+// ************************************************************************* //

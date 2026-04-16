@@ -1,0 +1,32 @@
+// Case: nRa200_BSA_P20bar_J20LMH_C1kgm3
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      simulationConditions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Hydraulic and operating conditions for BSA ultrafiltration
+Jv          5.56e-06;   // 20 LMH
+rRef        0.0762;
+Robs        0.98;
+CA0         1.0;
+
+RTobs       1.0;
+CT0         0.001;
+
+// 20 bar transmembrane pressure
+Pref        2.0e6;
+RPM         12876;
+
+
+// ************************************************************************* //
