@@ -133,7 +133,7 @@
 
             value           uniform (0 0 0);
         }
-«
+        */
 
     NOTES
     -----

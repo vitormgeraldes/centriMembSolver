@@ -16,7 +16,7 @@
  *        Film model (Robin BC on CA): k(CTw - CTi) = (RTint * Jv) * CTw
  *        → CTw = [kT / (kT - RTint*Jv)] * CTi
  *
- *   2) tracerPermeability  (SK closure)
+ *   2) solutePermeability  (SK closure)
  *        SK equation: JsT = (1 - sigmaT) Jv CTw + BT (CTw - CTp)
  *        → CTp = [(BT + (1 - sigmaT)Jv)/(BT + Jv)] * CTw = αT*CTw
  *        and JsT = Jv * CTp
@@ -113,7 +113,14 @@ membraneTracerFluxFvPatchScalarField::membraneTracerFluxFvPatchScalarField
     if      (m == "intrinsicRejection") model_ = Model::intrinsicRejection;
     else if (m == "solutePermeability") model_ = Model::solutePermeability;
     else if (m == "observedRejection")  model_ = Model::observedRejection;
-    else                                model_ = Model::Unknown;
+    else
+    {
+        FatalIOErrorInFunction(dict)
+            << "Unknown 'model' on patch '" << p.patch().name() << "'.\n"
+            << "Valid: intrinsicRejection | solutePermeability | observedRejection\n"
+            << "Got: '" << m << "'"
+            << exit(FatalIOError);
+    }
 
     // Reference/bulk concentration for diagnostics and inverse mode
     CTb_ = dict.lookupOrDefault<scalar>("CTb", 0.0);
@@ -238,19 +245,15 @@ membraneTracerFluxFvPatchScalarField::membraneTracerFluxFvPatchScalarField
 
 scalar membraneTracerFluxFvPatchScalarField::sigmaTFromUOrDefault1_
 (
-    const label patchI
+    const label /*patchI*/
 ) const
 {
-    // Try to read σ from the membraneSolventFlux BC on U (same patch).
-    // Fall back to 1.0 if not available.
-    const volVectorField& U = db().lookupObject<volVectorField>(UName_);
-    const fvPatchVectorField& Ubc = U.boundaryField()[patchI];
-
-    if (const auto* solv =
-            dynamic_cast<const membraneSolventFluxFvPatchVectorField*>(&Ubc))
-    {
-        return solv->sigma();
-    }
+    // The reflection coefficient sigmaT for the tracer is independent of
+    // the solvent BC's sigma (which characterises the primary solute, not
+    // the passive tracer). When 'sigmaT' is not specified by the user,
+    // default to perfect rejection (sigmaT = 1). To use a non-trivial
+    // tracer reflection coefficient, set 'sigmaT' explicitly in the patch
+    // dictionary.
     return 1.0;
 }
 
@@ -412,13 +415,13 @@ void membraneTracerFluxFvPatchScalarField::updateCoeffs()
     if (updated()) return;
 
     const label patchI = patch().index();
-// --- FAIL-FAST: exigir campos de exportação (CTp, Js, Jv) ---
+// --- Fail-fast: require the export volScalarFields (CTp, Jv, JsT) ---
 {
     const label pid = patchI;
 
     auto requireField = [&](const char* name, const char* dims) -> const volScalarField&
     {
-        // 1) Tem de existir no objectRegistry
+        // 1) Must exist in the object registry
         if (!db().foundObject<volScalarField>(name))
         {
             FatalErrorInFunction
@@ -432,7 +435,7 @@ void membraneTracerFluxFvPatchScalarField::updateCoeffs()
                 << exit(FatalError);
         }
 
-        // 2) E o tamanho do boundary no patch tem de coincidir
+        // 2) Boundary size on this patch must match
         const volScalarField& f = db().lookupObject<volScalarField>(name);
         if (f.boundaryField()[pid].size() != patch().size())
         {
@@ -454,7 +457,7 @@ void membraneTracerFluxFvPatchScalarField::updateCoeffs()
     (void)requireField("JsT",  "dimensionSet(1,-2,-1,0,0,0,0)");
     (void)requireField("Jv",  "dimensionSet(0, 1,-1,0,0,0,0)");
 }
-// --- fim FAIL-FAST ---
+// --- end fail-fast ---
 
     // Geometry & fields
     const scalarField& delta = patch().deltaCoeffs();    // [1/m]
@@ -518,6 +521,21 @@ void membraneTracerFluxFvPatchScalarField::updateCoeffs()
         : 1.0;
 
     // Face loop
+    //
+    // Robin BC implementation note. Cast the film-theory wall balance into
+    // OpenFOAM's mixedFvPatchScalarField form. Given the film balance
+    //   kT*(CTw - CTi) + hPhys*CTw = 0
+    // (with hPhys = RTint*J for intrinsic/observed and
+    //  hPhys = sigmaT*J^2/(BT+J) for solutePermeability), the analytic
+    // solution is CTw = (kT/(kT - hPhys)) * CTi. OpenFOAM's mixed
+    // evaluator is
+    //   CTw = alpha*refValue + (1 - alpha)*(CTi + refGrad*dx).
+    // Setting refValue = refGrad = 0 reproduces the desired CTw with
+    //   alpha = -hPhys / (kT - hPhys),
+    // which is *negative by construction* under physical conditions
+    // (hPhys > 0 and kT > hPhys). The valueFraction is therefore the
+    // algebraic Robin coefficient, not a "fraction" between 0 and 1; do
+    // not be alarmed by negative values.
     forAll(Ci, i)
     {
         const scalar k = max(kTDel[i], SMALL);   // [m/s]
@@ -763,20 +781,25 @@ void membraneTracerFluxFvPatchScalarField::write(Ostream& os) const
                 }
             }
 
-            // Summary tables (_summary), overwritten each writeTime
-            static label lastSummaryTimeIndexGlobal = -1;
-            const bool newWriteTime =
-                (runTime.timeIndex() != lastSummaryTimeIndexGlobal);
+            // Summary tables in _summary/, overwritten on the first call
+            // of each writeTime and then appended by all patches sharing
+            // the same model. Per-file static counters so that mixed-model
+            // configurations (different patches using different models)
+            // do not skip truncation of the file they did not just write.
+            static label lastTrunc_BTSigmaT_latest = -1;
+            static label lastTrunc_RTint_latest    = -1;
 
             if (model_ == Model::solutePermeability)
             {
                 const fileName latest = sumBase/"BT_sigmaT_latest.dat";
+                const bool newWriteTime =
+                    (runTime.timeIndex() != lastTrunc_BTSigmaT_latest);
                 if (newWriteTime)
                 {
                     std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::trunc);
                     if (osLatest.good())
                         osLatest << "# time[s]\tpatch\tBT\tsigmaTUsed\tRTobserved\n";
-                    lastSummaryTimeIndexGlobal = runTime.timeIndex();
+                    lastTrunc_BTSigmaT_latest = runTime.timeIndex();
                 }
                 std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::app);
                 if (osLatest.good())
@@ -803,12 +826,14 @@ void membraneTracerFluxFvPatchScalarField::write(Ostream& os) const
             else
             {
                 const fileName latest = sumBase/"RTint_latest.dat";
+                const bool newWriteTime =
+                    (runTime.timeIndex() != lastTrunc_RTint_latest);
                 if (newWriteTime)
                 {
                     std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::trunc);
                     if (osLatest.good())
                         osLatest << "# time[s]\tpatch\tRTint\tRTobserved\n";
-                    lastSummaryTimeIndexGlobal = runTime.timeIndex();
+                    lastTrunc_RTint_latest = runTime.timeIndex();
                 }
                 std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::app);
                 if (osLatest.good())

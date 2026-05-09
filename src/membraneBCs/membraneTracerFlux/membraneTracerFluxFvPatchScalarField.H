@@ -46,7 +46,7 @@
             value   uniform 0;
         }
 
-    (2) tracerPermeability  (Spiegler–Kedem closure)
+    (2) solutePermeability  (Spiegler–Kedem closure)
         Fundamental SK equation:
             JsT = (1 - σT) * Jv * CTw + BT * (CTw - CTp)
           →  CTp = [(BT + (1 - σT)Jv) / (BT + Jv)] * CTw = αT * CTw
@@ -161,7 +161,7 @@ private:
     // intrinsicRejection / storage for inferred value in observedRejection
     scalar RTint_{0.0};
 
-    // tracerPermeability
+    // solutePermeability
     scalar BT_{0.0};
     scalar sigmaT_{1.0};
     bool   hasSigmaT_{false};

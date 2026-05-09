@@ -51,7 +51,14 @@ membraneSolventFluxFvPatchVectorField
     if      (m=="SpieglerKedem")     model_=Model::SpieglerKedem;
     else if (m=="constantFlux")      model_=Model::constantFlux;
     else if (m=="targetAverageFlux") model_=Model::targetAverageFlux;
-    else                             model_=Model::Unknown;
+    else
+    {
+        FatalIOErrorInFunction(dict)
+            << "Unknown 'model' on patch '" << p.patch().name() << "'.\n"
+            << "Valid: SpieglerKedem | constantFlux | targetAverageFlux\n"
+            << "Got: '" << m << "'"
+            << exit(FatalIOError);
+    }
 
     if (model_==Model::SpieglerKedem) Ah_=dict.lookupOrDefault<scalar>("Ah",0.0);
     if (model_==Model::constantFlux)  JvConst_=dict.lookupOrDefault<scalar>("Jv",0.0);
@@ -413,32 +420,28 @@ void membraneSolventFluxFvPatchVectorField::write(Ostream& os) const
         appendPermeateFluxLine_(patch().name(), runTime, Jv_, Sf);
     }
 
-    // Master-only summary for targetAverageFlux (existing)
-if (model_==Model::targetAverageFlux && Pstream::master())
-{
-    const Time& runTime = this->db().time();
-
-    // ANTES:
-    // fileName dir = runTime.path()/"postProcessing"/"membraneSolventFlux"/patch().name();
-
-    // DEPOIS (raiz do case, fora de processor*/):
-    fileName dir = runTime.globalPath()/"postProcessing"/"membraneSolventFlux"/patch().name();
-
-    mkDir(dir);
-    OFstream osCalib(dir/"calibratedProperties.dat");
-    if (osCalib.good())
+    // Master-only summary for targetAverageFlux: write calibrated properties
+    // to <case>/postProcessing (using globalPath to land outside processor*/)
+    if (model_==Model::targetAverageFlux && Pstream::master())
     {
-        osCalib << "# Calibrated membrane properties for patch " << patch().name() << nl
-                << "timeFinal     " << runTime.timeOutputValue() << nl
-                << "AhStar        " << lastAhEff_                << nl
-                << "JvAverage     " << JvAverage_                << nl
-                << "sigma         " << sigma_                    << nl
-                << "virialCoeffs  " << virialCoeffs_             << nl
-                << "pPermConst    " << pPermConst_               << nl
-                << "model         targetAverageFlux"             << nl;
-    }
-}
+        const Time& runTime = this->db().time();
 
+        fileName dir = runTime.globalPath()/"postProcessing"/"membraneSolventFlux"/patch().name();
+
+        mkDir(dir);
+        OFstream osCalib(dir/"calibratedProperties.dat");
+        if (osCalib.good())
+        {
+            osCalib << "# Calibrated membrane properties for patch " << patch().name() << nl
+                    << "timeFinal     " << runTime.timeOutputValue() << nl
+                    << "AhStar        " << lastAhEff_                << nl
+                    << "JvAverage     " << JvAverage_                << nl
+                    << "sigma         " << sigma_                    << nl
+                    << "virialCoeffs  " << virialCoeffs_             << nl
+                    << "pPermConst    " << pPermConst_               << nl
+                    << "model         targetAverageFlux"             << nl;
+        }
+    }
 }
 
 } // namespace Foam

@@ -113,7 +113,14 @@ membraneSoluteFluxFvPatchScalarField::membraneSoluteFluxFvPatchScalarField
     if      (m == "intrinsicRejection") model_ = Model::intrinsicRejection;
     else if (m == "solutePermeability") model_ = Model::solutePermeability;
     else if (m == "observedRejection")  model_ = Model::observedRejection;
-    else                                model_ = Model::Unknown;
+    else
+    {
+        FatalIOErrorInFunction(dict)
+            << "Unknown 'model' on patch '" << p.patch().name() << "'.\n"
+            << "Valid: intrinsicRejection | solutePermeability | observedRejection\n"
+            << "Got: '" << m << "'"
+            << exit(FatalIOError);
+    }
 
     // Reference/bulk concentration for diagnostics and inverse mode
     CAb_ = dict.lookupOrDefault<scalar>("CAb", 0.0);
@@ -412,13 +419,13 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
     if (updated()) return;
 
     const label patchI = patch().index();
-// --- FAIL-FAST: exigir campos de exportação (CAp, Js, Jv) ---
+// --- Fail-fast: require the export volScalarFields (CAp, Js, Jv) ---
 {
     const label pid = patchI;
 
     auto requireField = [&](const char* name, const char* dims) -> const volScalarField&
     {
-        // 1) Tem de existir no objectRegistry
+        // 1) Must exist in the object registry
         if (!db().foundObject<volScalarField>(name))
         {
             FatalErrorInFunction
@@ -432,7 +439,7 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
                 << exit(FatalError);
         }
 
-        // 2) E o tamanho do boundary no patch tem de coincidir
+        // 2) Boundary size on this patch must match
         const volScalarField& f = db().lookupObject<volScalarField>(name);
         if (f.boundaryField()[pid].size() != patch().size())
         {
@@ -455,7 +462,7 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
     (void)requireField("Js",  "dimensionSet(1,-2,-1,0,0,0,0)");
     (void)requireField("Jv",  "dimensionSet(0, 1,-1,0,0,0,0)");
 }
-// --- fim FAIL-FAST ---
+// --- end fail-fast ---
 
     // Geometry & fields
     const scalarField& delta = patch().deltaCoeffs();    // [1/m]
@@ -519,6 +526,20 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
         : 1.0;
 
     // Face loop
+    //
+    // Robin BC implementation note. Cast the film-theory wall balance into
+    // OpenFOAM's mixedFvPatchScalarField form. Given the film balance
+    //   k*(Cw - Ci) + hPhys*Cw = 0
+    // (with hPhys = Rint*J for intrinsic/observed and
+    //  hPhys = sigma*J^2/(B+J) for solutePermeability), the analytic
+    // solution is Cw = (k/(k - hPhys)) * Ci. OpenFOAM's mixed evaluator is
+    //   Cw = alpha*refValue + (1 - alpha)*(Ci + refGrad*dx).
+    // Setting refValue = refGrad = 0 reproduces the desired Cw with
+    //   alpha = -hPhys / (k - hPhys),
+    // which is *negative by construction* under physical conditions
+    // (hPhys > 0 and k > hPhys). The valueFraction is therefore the
+    // algebraic Robin coefficient, not a "fraction" between 0 and 1; do
+    // not be alarmed by negative values.
     forAll(Ci, i)
     {
         const scalar k = max(kDel[i], SMALL);   // [m/s]
@@ -764,20 +785,25 @@ void membraneSoluteFluxFvPatchScalarField::write(Ostream& os) const
                 }
             }
 
-            // Summary tables (_summary), overwritten each writeTime
-            static label lastSummaryTimeIndexGlobal = -1;
-            const bool newWriteTime =
-                (runTime.timeIndex() != lastSummaryTimeIndexGlobal);
+            // Summary tables in _summary/, overwritten on the first call
+            // of each writeTime and then appended by all patches sharing
+            // the same model. Per-file static counters so that mixed-model
+            // configurations (different patches using different models)
+            // do not skip truncation of the file they did not just write.
+            static label lastTrunc_BSigma_latest = -1;
+            static label lastTrunc_Rint_latest   = -1;
 
             if (model_ == Model::solutePermeability)
             {
                 const fileName latest = sumBase/"B_sigma_latest.dat";
+                const bool newWriteTime =
+                    (runTime.timeIndex() != lastTrunc_BSigma_latest);
                 if (newWriteTime)
                 {
                     std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::trunc);
                     if (osLatest.good())
                         osLatest << "# time[s]\tpatch\tB\tsigmaUsed\tRobserved\n";
-                    lastSummaryTimeIndexGlobal = runTime.timeIndex();
+                    lastTrunc_BSigma_latest = runTime.timeIndex();
                 }
                 std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::app);
                 if (osLatest.good())
@@ -804,12 +830,14 @@ void membraneSoluteFluxFvPatchScalarField::write(Ostream& os) const
             else
             {
                 const fileName latest = sumBase/"Rint_latest.dat";
+                const bool newWriteTime =
+                    (runTime.timeIndex() != lastTrunc_Rint_latest);
                 if (newWriteTime)
                 {
                     std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::trunc);
                     if (osLatest.good())
                         osLatest << "# time[s]\tpatch\tRint\tRobserved\n";
-                    lastSummaryTimeIndexGlobal = runTime.timeIndex();
+                    lastTrunc_Rint_latest = runTime.timeIndex();
                 }
                 std::ofstream osLatest(latest.c_str(), std::ios::out | std::ios::app);
                 if (osLatest.good())
