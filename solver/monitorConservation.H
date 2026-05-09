@@ -106,7 +106,7 @@ static const Foam::word DIFF_FIELD_NAME("Deff");
         const polyPatch& pp = pbm[pid];
         const word& pType = pp.type();
 
-        // Ignorar patches acopladas (processor/cyclic/AMI) e empty/wedge
+        // Skip coupled patches (processor/cyclic/AMI) and empty/wedge
         if (pp.coupled() || pType == "empty" || pType == "wedge")
             continue;
 
@@ -191,7 +191,7 @@ static const Foam::word DIFF_FIELD_NAME("Deff");
     {
         const Time& rt = mesh_.time();
 
-        // Case root (fora de processorN em execuções paralelas)
+        // Case root (outside processorN/ in parallel execution)
         const fileName outDir  = rt.globalPath()/"postProcessing"/"conservation";
         const fileName outFile = outDir/"cons.dat";
         mkDir(outDir);

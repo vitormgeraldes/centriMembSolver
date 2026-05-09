@@ -13,21 +13,6 @@ volScalarField p_rgh
     ),
     mesh
 );
-Info<< "Creating field p\n" << endl;
-volScalarField p
-(
-    IOobject
-    (
-        "p",
-        runTime.timeName(),
-        mesh,
-        IOobject::NO_READ,
-        IOobject::AUTO_WRITE
-    ),
-    mesh,
-    dimensionedScalar( "p",dimensionSet(1,-1,-2,0,0,0,0),1e5)
-);
-
 
 Info<< "Reading field U\n" << endl;
 volVectorField U
@@ -93,8 +78,23 @@ volScalarField Deff
 mesh.setFluxRequired(p_rgh.name());
 
 #include "readRotationalAcceleration.H"
+
+Info<< "Creating field p\n" << endl;
+volScalarField p
+(
+    IOobject
+    (
+        "p",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::AUTO_WRITE
+    ),
+    mesh,
+    dimensionedScalar("p", dimensionSet(1,-1,-2,0,0,0,0), 1e5)
+);
+
 #include "createFvOptions.H"
-// Remove membraneFields include - we create membrane fields directly below
 
 Info<< "Creating turbulence model\n" << endl;
 

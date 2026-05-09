@@ -50,11 +50,11 @@ scalar rpm  = readScalar(dictSRF.lookup("rpm"));
 dimensionedVector omega("omega", dimless/dimTime, vector(0,0,0));
 dimensionedVector origin("origin", dimLength, vector(0,0,0));
 dimensionedScalar conver("conver", dimless/dimTime, 1);
-dimensionedScalar converLenght("converLenght", dimLength, 1);
+dimensionedScalar converLength("converLength", dimLength, 1);
 
 // Use precise numeric π without extra includes; no API changes
 conver.value() = (2.0*3.14159265358979323846/60.0)*rpm;
-origin = Rorigin*converLenght;
+origin = Rorigin*converLength;
 omega  = conver*axis;
 
 volScalarField gh

@@ -8,23 +8,37 @@ Info<< "Updating transport properties (nu(CA), DAB(CA), rho)\n" << endl;
 laminarTransport.correct();
 
 // 3) Update molecular diffusivity DAB = DAB(CA)
+//    Updates BOTH internalField AND boundaryField from CA at the same point.
+//    The boundary update is critical on the membrane patch where Cw is large
+//    (concentration polarization) and DAB(Cw) > DAB(C_bulk) by a sizeable factor:
+//    using DAB0 on the membrane underestimates back-diffusion and inflates Γ.
 {
-    scalarField&       d = DAB.ref();
-    const scalarField& c = CA.internalField();
-
-    forAll(d, i)
+    auto polyDab = [&](scalar Ci) -> scalar
     {
-        const scalar Ci = c[i];
-        d[i] = max(
+        return max(
             DAB0.value()
           + DAB1.value()*Ci
           + DAB2.value()*Ci*Ci
           + DAB3.value()*Ci*Ci*Ci
           + DAB4.value()*Ci*Ci*Ci*Ci,
-          scalar(1e-12)
+            scalar(1e-12)
         );
+    };
+
+    // internalField
+    scalarField&       d = DAB.ref();
+    const scalarField& c = CA.internalField();
+    forAll(d, i) { d[i] = polyDab(c[i]); }
+
+    // boundaryField — recompute from CA face values on every patch
+    volScalarField::Boundary&        dBf = DAB.boundaryFieldRef();
+    const volScalarField::Boundary&  cBf = CA.boundaryField();
+    forAll(dBf, patchi)
+    {
+        scalarField&       dp = dBf[patchi];
+        const scalarField& cp = cBf[patchi];
+        forAll(dp, fi) { dp[fi] = polyDab(cp[fi]); }
     }
-    DAB.correctBoundaryConditions();
 }
 
 // 4) Update density if you’re using a Boussinesq-like relation

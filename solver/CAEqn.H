@@ -15,9 +15,11 @@ Info << "Solve the solute continuity equation" << endl;
     );
 
     CAEqn.relax();
+    fvOptions.constrain(CAEqn);
 
     CAEqn.solve();
 
+    fvOptions.correct(CA);
     CA.correctBoundaryConditions();
 
 
