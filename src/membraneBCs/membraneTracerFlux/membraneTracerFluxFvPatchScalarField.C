@@ -13,14 +13,14 @@
  *  Models implemented (Spiegler–Kedem / Kedem–Katchalsky family):
  *   1) intrinsicRejection
  *        JsT = Jv * CTp,  with CTp = (1 - RTint) * CTw
- *        Film model (Robin BC on CA): k(CTw - CTi) = (RTint * Jv) * CTw
+ *        Film model (Robin BC on CT): kT(CTw - CTi) = (RTint * Jv) * CTw
  *        → CTw = [kT / (kT - RTint*Jv)] * CTi
  *
  *   2) solutePermeability  (SK closure)
  *        SK equation: JsT = (1 - sigmaT) Jv CTw + BT (CTw - CTp)
  *        → CTp = [(BT + (1 - sigmaT)Jv)/(BT + Jv)] * CTw = αT*CTw
  *        and JsT = Jv * CTp
- *        If 'sigmaT' omitted, σ is inherited from the solvent BC on U (defaults to 1).
+ *        If 'sigmaT' omitted, defaults to 1 (full rejection of tracer).
  *
  *   3) observedRejection (inverse)
  *        Infers RTint so that RTobs_model = 1 - <Jv*CTp>/<Jv>/CTb matches user 'RTobs'
@@ -523,12 +523,17 @@ void membraneTracerFluxFvPatchScalarField::updateCoeffs()
     // Face loop
     //
     // Robin BC implementation note. Cast the film-theory wall balance into
-    // OpenFOAM's mixedFvPatchScalarField form. Given the film balance
-    //   kT*(CTw - CTi) + hPhys*CTw = 0
-    // (with hPhys = RTint*J for intrinsic/observed and
-    //  hPhys = sigmaT*J^2/(BT+J) for solutePermeability), the analytic
-    // solution is CTw = (kT/(kT - hPhys)) * CTi. OpenFOAM's mixed
-    // evaluator is
+    // OpenFOAM's mixedFvPatchScalarField form. The local steady-state
+    // mass balance at the membrane face (convective influx J*CTw, permeate
+    // outflux J*CTp, diffusive removal back into bulk DT*dCT/dn|_w ~
+    // kT*(CTw - CTi) with kT = DT*delta) is
+    //   kT*(CTw - CTi) = hPhys*CTw,
+    // i.e.  kT*(CTw - CTi) + hMix*CTw = 0  with  hMix = -hPhys,
+    // where hPhys = RTint*J for intrinsic/observed and
+    //       hPhys = sigmaT*J^2/(BT+J) for solutePermeability.
+    // The analytic wall concentration is therefore
+    //   CTw = (kT/(kT - hPhys)) * CTi.
+    // OpenFOAM's mixed evaluator is
     //   CTw = alpha*refValue + (1 - alpha)*(CTi + refGrad*dx).
     // Setting refValue = refGrad = 0 reproduces the desired CTw with
     //   alpha = -hPhys / (kT - hPhys),

@@ -528,11 +528,17 @@ void membraneSoluteFluxFvPatchScalarField::updateCoeffs()
     // Face loop
     //
     // Robin BC implementation note. Cast the film-theory wall balance into
-    // OpenFOAM's mixedFvPatchScalarField form. Given the film balance
-    //   k*(Cw - Ci) + hPhys*Cw = 0
-    // (with hPhys = Rint*J for intrinsic/observed and
-    //  hPhys = sigma*J^2/(B+J) for solutePermeability), the analytic
-    // solution is Cw = (k/(k - hPhys)) * Ci. OpenFOAM's mixed evaluator is
+    // OpenFOAM's mixedFvPatchScalarField form. The local steady-state
+    // mass balance at the membrane face (convective influx J*Cw, permeate
+    // outflux J*Cp, diffusive removal back into bulk D*dC/dn|_w ~
+    // k*(Cw - Ci) with k = D*delta) is
+    //   k*(Cw - Ci) = hPhys*Cw,
+    // i.e.  k*(Cw - Ci) + hMix*Cw = 0   with  hMix = -hPhys,
+    // where hPhys = Rint*J for intrinsic/observed and
+    //       hPhys = sigma*J^2/(B+J) for solutePermeability.
+    // The analytic wall concentration is therefore
+    //   Cw = (k/(k - hPhys)) * Ci.
+    // OpenFOAM's mixed evaluator is
     //   Cw = alpha*refValue + (1 - alpha)*(Ci + refGrad*dx).
     // Setting refValue = refGrad = 0 reproduces the desired Cw with
     //   alpha = -hPhys / (k - hPhys),

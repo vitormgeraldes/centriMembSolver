@@ -33,8 +33,8 @@
 
     (1) intrinsicRejection
         JsT = Jv * CTp,  CTp = (1 - RTint) * CTw
-        Film model:   k (CTw - Ci) = (RTint * Jv) * CTw
-                     → CTw = [k / (k - RTint*Jv)] * Ci
+        Film model:   k (CTw - CTi) = (RTint * Jv) * CTw
+                     → CTw = [k / (k - RTint*Jv)] * CTi
 
         Example:
         membraneB
@@ -51,7 +51,7 @@
             JsT = (1 - σT) * Jv * CTw + BT * (CTw - CTp)
           →  CTp = [(BT + (1 - σT)Jv) / (BT + Jv)] * CTw = αT * CTw
               αT = (BT + (1 - σT)Jv) / (BT + Jv)
-            Js = Jv * CTp
+            JsT = Jv * CTp
 
         Example:
         membraneB
@@ -66,8 +66,8 @@
 
         Sigma selection rules:
           - if 'sigmaT' is specified → use it
-          - else if the velocity BC is membraneSolventFlux → inherit σ
-          - else σT = 1.0 (default: perfectly selective)
+          - else σT = 1.0 (default: tracer fully rejected; independent
+            from the solvent BC's σ for the primary solute)
 
     (3) observedRejection  (inverse / target Robs)
         Infers RTint such that:
