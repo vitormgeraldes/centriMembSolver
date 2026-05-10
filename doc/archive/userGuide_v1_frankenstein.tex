@@ -1,0 +1,1611 @@
+% -----------------------------------------------------------------------------
+% centriMembSolver — Theory, Implementation and Usage Guide
+%
+% This document serves as a combined user and developer guide for
+% ``centriMembSolver``, an OpenFOAM®-based solver developed for the numerical
+% simulation of rotating membrane systems. The documentation is intended to be
+% concise, technically precise, and self-contained.
+%
+% The solver couples incompressible hydrodynamics, solute transport,
+% centrifugal acceleration, Coriolis effects, and osmotic phenomena across
+% semi-permeable membrane boundaries. The explicit treatment of the Coriolis
+% term and its coupling within the PIMPLE iteration are described in detail,
+% together with the membrane boundary conditions, numerical algorithms, and
+% overall solver architecture.
+%
+% The manual is intended for advanced users and developers with prior
+% experience in OpenFOAM and continuum transport phenomena.
+% -----------------------------------------------------------------------------
+
+\documentclass[11pt,a4paper]{article}
+
+% ------------------------- Packages and settings -------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{siunitx}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+
+\geometry{margin=25mm}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1ex plus 0.5ex minus 0.2ex}
+
+\hypersetup{
+	colorlinks=true,
+	linkcolor=blue,
+	urlcolor=blue,
+	citecolor=blue
+}
+
+% ------------------------ Title and meta information ------------------------
+\title{\bfseries centriMembSolver — Theory, Implementation and Usage Guide\\[1ex]
+	\large A combined user and developer manual for rotating membrane simulations}
+
+\author{
+	V\'itor Geraldes\\
+	Department of Chemical Engineering\\
+	Instituto Superior Técnico — Universidade de Lisboa\\
+	\texttt{vitor.geraldes@tecnico.ulisboa.pt}
+}
+
+\date{\today}
+
+\begin{document}
+	
+	% ======================================================================
+	% Page 1 — Title page
+	% ======================================================================
+	\begin{titlepage}
+		\maketitle
+		\thispagestyle{empty}
+	\end{titlepage}
+	
+	% ======================================================================
+	% Page 2 — License and trademark notice
+	% ======================================================================
+	\clearpage
+	\thispagestyle{plain}
+	
+	\section*{License and trademarks}
+
+	\textbf{Copyright.} \copyright\ 2026 V\'itor Geraldes.
+
+	\medskip
+	\textbf{Software.}
+	\texttt{centriMembSolver} is distributed under the GNU General Public
+	License version 3 (GPLv3) or later. See the \texttt{LICENSE} file
+	distributed with the source code. The software is provided ``as is'',
+	WITHOUT WARRANTY OF ANY KIND, express or implied, including but not
+	limited to the warranties of merchantability, fitness for a particular
+	purpose and noninfringement; see the GPL for details.
+
+	\medskip
+	\textbf{Documentation.}
+	This manual is licensed under the Creative Commons Attribution 4.0
+	International License (CC BY 4.0), unless stated otherwise.
+
+	\medskip
+	\textbf{Trademarks.}
+	OpenFOAM\textsuperscript{\textregistered} is a registered trademark of
+	OpenCFD Limited (ESI Group). Linux\textsuperscript{\textregistered} is
+	a registered trademark of Linus Torvalds. ParaView is a trademark of
+	Kitware Inc. This work is not affiliated with, endorsed by, or
+	sponsored by OpenCFD Limited, the Linux Foundation, or Kitware Inc.
+
+	% ======================================================================
+	% Page 3 — How to cite
+	% ======================================================================
+	\clearpage
+	\thispagestyle{plain}
+
+	\section*{How to cite}
+	\addcontentsline{toc}{section}{How to cite}
+
+	\noindent
+	\texttt{centriMembSolver} is distributed as an open-source platform for
+	the community of rotating-membrane simulations.  Users who publish work
+	based on the solver are encouraged to cite the versioned software
+	release directly:
+
+	\begin{quote}
+		Geraldes, V., \emph{centriMembSolver: a finite-volume solver for
+		rotating membrane systems built on OpenFOAM\textsuperscript{\textregistered}
+		technology}, version 1.1.0, Zenodo,
+		\textbf{[DOI to be inserted upon Zenodo deposit]}, 2026.
+	\end{quote}
+
+	A BibTeX entry is provided in the source repository
+	(\href{https://github.com/vitormgeraldes/centriMembSolver}{\texttt{github.com/vitormgeraldes/centriMembSolver}}).
+
+	\medskip
+	\noindent
+	\textbf{Application example.}  A first quantitative application of
+	\texttt{centriMembSolver} to the prediction of concentration
+	polarisation in Ortho-Centrifugal Membrane Filters is described in
+	Geraldes \emph{et al.} (\emph{Predicting concentration polarization
+	in Ortho-Centrifugal Membrane Filters for NF/RO membrane screening},
+	submitted to \emph{Journal of Membrane Science}).  That work
+	documents a buoyancy-driven mass-transfer correlation derived from a
+	direct numerical simulation dataset produced with this solver and is
+	the appropriate reference for users adopting the same physical
+	framework.
+
+	\medskip
+	\noindent
+	\textbf{Methodological extensions.}  Users developing new boundary
+	conditions, transport closures, multi-physics couplings, or new
+	application studies are encouraged to publish their own descriptions
+	and to reference the \texttt{centriMembSolver} software DOI as the
+	implementation platform.  Pull requests with new tutorials, BC
+	classes or transport models are welcome via the source repository.
+
+	% ======================================================================
+	% Page 4 — Abstract
+	% ======================================================================
+	\clearpage
+	\thispagestyle{plain}
+
+	\section*{Abstract}
+	\addcontentsline{toc}{section}{Abstract}
+	
+	\noindent
+	\texttt{centriMembSolver} is a finite–volume solver for coupled solvent and
+	solute transport through rotating membranes. It extends
+	\texttt{buoyantBoussinesqPimpleFoam} to include solute transport and semi-permeable membrane boundary conditions,
+	concentration-dependent viscosity, and an explicit treatment of the
+	Coriolis force consistent with the Boussinesq buoyancy formulation under
+	centrifugal acceleration. This guide documents the underlying theory,
+	the implementation of membrane flux models, and the overall solver
+	architecture. A worked example, \emph{rotatingSlit}, is included to
+	illustrate case setup and post-processing. The document is intended both
+	for end-users running membrane simulations and for developers wishing to
+	extend the solver to new flux laws or multi-physics couplings.
+	
+	% ======================================================================
+	% Page 4 — Table of contents
+	% ======================================================================
+	\clearpage
+	\thispagestyle{plain}
+	\tableofcontents
+
+	% ======================================================================
+	% Notation
+	% ======================================================================
+	\clearpage
+	\thispagestyle{plain}
+	\section*{Notation}
+	\addcontentsline{toc}{section}{Notation}
+
+	\noindent
+	The following table maps the mathematical symbols used throughout this
+	manual to the corresponding OpenFOAM field names and dictionary keys.
+
+	\renewcommand{\arraystretch}{1.15}
+	\begin{tabular}{@{}lp{7cm}ll@{}}
+		\toprule
+		Symbol & Quantity & Field / dict key & Units\\
+		\midrule
+		$\boldsymbol{U}$ & velocity field (rotating frame) & \texttt{U} & m\,s$^{-1}$\\
+		$p_\mathrm{rgh}$ & modified (dynamic) pressure & \texttt{p\_rgh} & Pa\\
+		$\mathrm{gh}$ & combined gravitational + centrifugal hydrostatic potential per unit mass & \texttt{gh} & m$^2$\,s$^{-2}$\\
+		$\rho_k$ & dimensionless density ratio $\rho/\rho_0$ & \texttt{rhok} & --\\
+		$\mathbf{r}$ & position vector relative to the rotation axis & --- & m\\
+		$\mathbf{r}_{\!\perp}$ & component of $\mathbf{r}$ perpendicular to the rotation axis & --- & m\\
+		$\boldsymbol{\Omega}$ & angular velocity vector (along rotation axis) & \texttt{SRFProperties} (\texttt{rpm}, \texttt{axis}) & rad\,s$^{-1}$\\
+		$\Omega$ & angular speed, $\Omega = \lvert\boldsymbol{\Omega}\rvert$ & --- & rad\,s$^{-1}$\\
+		$r_m$ & membrane orbit radius (for centrifugal NF/RO cartridges) & --- & m\\
+		$a_m$ & centrifugal acceleration at the membrane, $a_m = \Omega^2 r_m$ & --- & m\,s$^{-2}$\\
+		\midrule
+		$C_A$ & primary solute concentration & \texttt{CA} & kg\,m$^{-3}$\\
+		$D_A(C_A)$ & primary solute diffusivity (concentration--dependent) & \texttt{speciesData} (\texttt{DAB0..4}) & m$^2$\,s$^{-1}$\\
+		$\nu(C_A)$ & kinematic viscosity (concentration--dependent) & \texttt{speciesData} (\texttt{nu0..2}) & m$^2$\,s$^{-1}$\\
+		$\beta$ & solutal contraction coefficient $(1/\rho_0)(\partial\rho/\partial C_A)$ & \texttt{speciesData} (\texttt{beta}) & (kg\,m$^{-3}$)$^{-1}$\\
+		$\rho_0$ & reference density (water at $T_\mathrm{ref}$) & \texttt{speciesData} (\texttt{rho0}) & kg\,m$^{-3}$\\
+		$\pi(C_A)$ & osmotic pressure & via \texttt{virialCoeffs} & Pa\\
+		\midrule
+		$C_T$ & tracer (passive secondary solute) concentration & \texttt{CT} & kg\,m$^{-3}$\\
+		$D_T$ & tracer diffusivity (constant) & \texttt{transportProperties} (\texttt{DT0}) & m$^2$\,s$^{-1}$\\
+		\midrule
+		$J_v$ & solvent (water) flux through membrane & patch field \texttt{Jv} & m\,s$^{-1}$\\
+		$J_s$ & solute mass flux through membrane & patch field \texttt{Js} & kg\,(m$^2$\,s)$^{-1}$\\
+		$J_{s,T}$ & tracer mass flux through membrane & patch field \texttt{JsT} & kg\,(m$^2$\,s)$^{-1}$\\
+		$C_w$, $C_p$ & solute concentrations at the membrane wall (feed side) and permeate side & internal $/$ \texttt{CAp} & kg\,m$^{-3}$\\
+		$C_f$, $C_b$ & feed-side and bulk reference concentrations & dict (\texttt{CAb}) & kg\,m$^{-3}$\\
+		\midrule
+		$A_h$ & hydraulic permeability of membrane & \texttt{Ah} & m\,(Pa\,s)$^{-1}$\\
+		$\sigma$ & solute reflection coefficient (Spiegler--Kedem) & \texttt{sigma} & --\\
+		$\sigma_T$ & tracer reflection coefficient (default 1) & \texttt{sigmaT} & --\\
+		$B$ & solute permeability coefficient (Kedem--Katchalsky) & \texttt{B} & m\,s$^{-1}$\\
+		$B_T$ & tracer permeability coefficient & \texttt{BT} & m\,s$^{-1}$\\
+		$R_\mathrm{int}$, $R_\mathrm{obs}$ & intrinsic and observed solute rejection & \texttt{Rint}, \texttt{Robs} & --\\
+		$R_{T,\mathrm{int}}$, $R_{T,\mathrm{obs}}$ & intrinsic and observed tracer rejection & \texttt{RTint}, \texttt{RTobs} & --\\
+		$\Gamma$ & solute concentration polarisation $(C_w - C_b)/C_b$ & volume field \texttt{Gama} & --\\
+		$\Gamma_T$ & tracer concentration polarisation & volume field \texttt{GamaT} & --\\
+		\bottomrule
+	\end{tabular}
+	\renewcommand{\arraystretch}{1.0}
+
+	% ======================================================================
+	% Page 5+ — Main content
+	% ======================================================================
+	\clearpage
+
+	% ======================================================================
+
+\section{Introduction}
+
+Rotating membrane systems combine fluid flow, solute transport and
+selective separation in a centrifugal field.  Applications range from
+ultra–scale–down (USD) process development, where small membrane coupons
+are rotated at high speed to emulate industrial centrifugation, to
+high-throughput screening of nanofiltration and reverse osmosis (NF/RO)
+membranes in centrifugal filter cartridges.  In these systems a
+pressure gradient drives solvent through a semi–permeable barrier while
+a concentration difference induces osmotic counterflow.  Rotation adds
+centrifugal and Coriolis effects that modify the hydrodynamics and
+solute distribution.
+
+\texttt{centriMembSolver} was developed to provide an open and
+customisable platform for simulating such coupled phenomena.  Built on
+OpenFOAM® v2506, the solver solves the incompressible Navier–Stokes
+equations with source terms for rotation, a scalar transport equation
+for solute concentration and custom patch fields to model membrane
+fluxes.  The Coriolis acceleration is treated as an explicit source
+term in the momentum equation, refreshed at every PIMPLE outer
+iteration; this is sufficient under the small CFL-bounded time steps
+characteristic of rotating membrane DNS.  In addition, the membrane
+boundary conditions
+implement well established flux laws—Spiegler–Kedem, constant flux and
+target average flux for the solvent, and intrinsic rejection, solute
+permeability or observed rejection for the solute.  Diagnostic
+quantities such as observed rejection and concentration polarisation are
+computed automatically. As of the 2026 release, the solver has been extended to simulate a primary solute A and a passive tracer T with separate diffusivities and membrane flux models, enabling tracer-based validation experiments.
+
+The following sections present the governing equations (including
+viscous and osmotic effects), derive the robust Coriolis algorithm,
+detail the boundary conditions, describe the solver structure and
+illustrate usage through a case study.  Developer notes at the end
+provide guidance on extending the code and best practice for stable
+simulations.
+
+An example application of the solver, including validation against
+experimental data, is summarised on page~\pageref{sec:cases} and
+described in detail in the work cited under \emph{How to cite}.
+
+\subsection*{Quick start}
+\addcontentsline{toc}{subsection}{Quick start}
+
+For users who want to run a case immediately, the following commands
+compile the libraries and the solver and execute the bundled
+two-dimensional tutorial \texttt{rotatingSlit}.  \texttt{<repo>}
+denotes the root of the cloned source tree, and an active OpenFOAM
+environment (\texttt{source} of \texttt{etc/bashrc}) is assumed.
+
+\paragraph{Serial (single-process) workflow.}
+\begin{enumerate}
+	\item Build the membrane boundary-condition and transport
+	libraries, then the solver:
+	\begin{verbatim}
+cd <repo>/src     && wmake all libso
+cd <repo>/solver  && wmake
+	\end{verbatim}
+
+	\item Run the bundled tutorial:
+	\begin{verbatim}
+cd <repo>/tutorials/rotatingSlit
+blockMesh
+centriMembSolver
+	\end{verbatim}
+
+	\item Visualise the results in ParaView (requires the
+	\texttt{paraFoam} reader shipped with OpenFOAM):
+	\begin{verbatim}
+paraFoam
+	\end{verbatim}
+\end{enumerate}
+
+\paragraph{Parallel (MPI) workflow.}
+For three-dimensional cases the solver runs under MPI in the standard
+OpenFOAM idiom:
+\begin{verbatim}
+decomposePar                                     # split mesh+fields
+mpirun -np <N> centriMembSolver -parallel        # run on N processes
+reconstructPar                                   # merge fields for paraFoam
+\end{verbatim}
+The number of processes \texttt{<N>} is set by
+\texttt{numberOfSubdomains} in
+\texttt{system/decomposeParDict}; standard \texttt{simple} or
+\texttt{scotch} decomposition methods are supported.
+
+Section~\ref{sec:cases} walks through the bundled tutorial file by
+file and explains the diagnostic outputs.
+
+% ===========================================================================
+
+
+\section{Theory and Governing Equations}
+
+\subsection{Hydrodynamics}
+
+In a non-inertial reference frame rotating with angular velocity
+\(\boldsymbol{\Omega}\), the incompressible Navier–Stokes equations read
+\begin{equation}
+	\nabla\cdot\mathbf{U} = 0,\qquad
+	\rho \frac{\partial\mathbf{U}}{\partial t} + \rho\,\nabla\cdot(\mathbf{U}\mathbf{U})
+	= -\nabla p + \nabla\cdot(\mu_{\mathrm{eff}}\nabla\mathbf{U})
+	+ \rho\,\mathbf{f}_{\mathrm{rot}},
+\end{equation}
+where \(\mathbf{U}\) is the velocity, \(p\) the kinematic pressure
+(\(p=p_{\mathrm{phys}}/\rho\)), and the effective viscosity
+\(\mu_{\mathrm{eff}} = \rho(\nu + \nu_t)\) includes molecular and—if
+selected—turbulent viscosity.
+
+The rotational body force \(\mathbf{f}_{\mathrm{rot}}\) contains the
+two pseudo-forces appearing in a uniformly rotating frame, the
+centrifugal and Coriolis terms,
+\begin{equation}
+	\mathbf{f}_{\mathrm{rot}}
+	= -\,\boldsymbol{\Omega}\times(\boldsymbol{\Omega}\times\mathbf{r})
+	- 2\,\boldsymbol{\Omega}\times\mathbf{U},
+\end{equation}
+with \(\mathbf{r}\) the position vector relative to the rotation axis.
+The first term is conservative and points radially outward,
+\(-\boldsymbol{\Omega}\times(\boldsymbol{\Omega}\times\mathbf{r})
+= +\Omega^2\,\mathbf{r}_{\!\perp}\); the second is non-conservative.
+Pressure--velocity coupling is handled by the PIMPLE algorithm
+(Pressure-Implicit Method for Pressure-Linked Equations, the standard
+OpenFOAM transient pressure-correction scheme), as implemented in
+\texttt{UEqn.H} and \texttt{pEqn.H}.
+
+
+
+
+
+
+
+\subsubsection{Modified pressure, hydrostatic potential and Boussinesq buoyancy}
+
+Rotating membrane devices exhibit very large hydrostatic pressure
+gradients, dominated by centrifugal effects. The physical pressure
+\(p\) may increase by several bars over a few centimetres of radius,
+while the dynamic variations induced by fluid motion are much smaller.
+If \(p\) is solved directly, the linear systems become ill–conditioned
+and the convergence of the PIMPLE algorithm deteriorates.
+
+To avoid this, \texttt{centriMembSolver} follows the standard OpenFOAM
+strategy and works with three auxiliary fields:
+
+\begin{itemize}
+	\item \texttt{p\_rgh}: modified (dynamic) pressure
+	\item \texttt{gh}: hydrostatic potential per unit mass
+	\item \texttt{rhok}: dimensionless density ratio
+\end{itemize}
+
+The solver only solves for the dynamic component \texttt{p\_rgh}; the
+hydrostatic contribution is treated analytically via \texttt{gh} and
+\texttt{rhok}.
+
+\paragraph{Boussinesq density field}
+
+Under the Boussinesq approximation, the density depends weakly on
+solute concentration,
+\begin{equation}
+	\rho(\boldsymbol{x}) = \rho_0\,\rho_k(\boldsymbol{x}),
+	\qquad
+	|\rho_k - 1| \ll 1,
+\end{equation}
+where the code field \texttt{rhok} corresponds to the scalar
+\(\rho_k\). The Boussinesq approximation replaces \(\rho\) by the
+constant reference value \(\rho_0\) in every term of the momentum
+equation \emph{except} the body--force (buoyancy) term, where the
+actual density \(\rho = \rho_0\rho_k\) is retained.  This linearises
+the inertia, viscous and Coriolis terms while capturing the
+leading-order density-driven body force.  Consistently with this
+approximation, the velocity field is treated as divergence--free,
+\begin{equation}
+	\nabla\cdot\boldsymbol{U} = 0,
+	\qquad
+	\frac{\partial \rho}{\partial t} = 0,
+\end{equation}
+but density variations (\(\rho_k \neq 1\)) still generate buoyancy forces.
+
+\paragraph{Effective acceleration in the rotating frame}
+
+Let \(\boldsymbol{x}\) denote the position vector in the rotating frame
+and \(\boldsymbol{x}_0\) a point on the rotation axis. Both are read
+from \texttt{constant/SRFProperties} (Single Reference Frame: the
+OpenFOAM dictionary that specifies the rotation axis through
+\texttt{origin} and \texttt{axis}, and the rotation rate through
+\texttt{rpm}). A fluid particle at rest in this frame is
+subject to gravity and centrifugal acceleration:
+\begin{equation}
+	\boldsymbol{a}_{\mathrm{eff}}(\boldsymbol{x})
+	=
+	\boldsymbol{g}
+	-
+	\boldsymbol{\Omega}\times
+	\bigl(
+	\boldsymbol{\Omega}\times(\boldsymbol{x}-\boldsymbol{x}_0)
+	\bigr),
+	\label{eq:a_eff}
+\end{equation}
+where \(\boldsymbol{g}\) is the gravitational acceleration and
+\(\boldsymbol{\Omega}\) the angular velocity vector.  Note that
+\(-\boldsymbol{\Omega}\times(\boldsymbol{\Omega}\times\mathbf{r}_\perp)
+= +\Omega^2\,\mathbf{r}_\perp\), where \(\mathbf{r}_\perp\) is the
+component of \(\mathbf{r}\) perpendicular to the rotation axis: the
+centrifugal acceleration points radially outward.
+
+The Coriolis term \(-2\,\boldsymbol{\Omega}\times\boldsymbol{U}\) is
+non–conservative and is therefore \emph{not} included in
+\(\boldsymbol{a}_{\mathrm{eff}}\).
+
+\paragraph{Hydrostatic potential \texttt{gh}}
+
+The key point is that the effective acceleration \(\boldsymbol{a}_{\rm eff}\)
+in \eqref{eq:a_eff} is conservative: it can be written as the gradient
+of a scalar potential per unit mass. OpenFOAM stores this potential in
+the field \texttt{gh}, defined so that
+\begin{equation}
+	\nabla (\mathrm{gh}) = \boldsymbol{a}_{\mathrm{eff}}.
+\end{equation}
+
+A convenient explicit expression is
+\begin{equation}
+	\mathrm{gh}(\boldsymbol{x})
+	=
+	\boldsymbol{g}\cdot(\boldsymbol{x}-\boldsymbol{x}_{\mathrm{ref}})
+	+ \frac{1}{2}
+	\left|
+	\boldsymbol{\Omega}\times(\boldsymbol{x}-\boldsymbol{x}_0)
+	\right|^2
+	- \mathrm{gh}_{\mathrm{ref}},
+	\label{eq:gh_def}
+\end{equation}
+where \(\boldsymbol{x}_{\mathrm{ref}}\) is a reference point and
+\(\mathrm{gh}_{\mathrm{ref}}\) is a constant offset. This offset does not
+affect the physics, since only gradients of \(\mathrm{gh}\) enter the
+equations.
+
+\medskip
+\noindent
+\textbf{Physical meaning.}
+\(\mathrm{gh}\) is the hydrostatic potential per unit mass, combining
+gravitational and centrifugal contributions. Surfaces of constant
+\(\mathrm{gh}\) correspond to equilibrium surfaces of a fluid at rest
+under gravity and rotation.
+
+\medskip
+\noindent
+\textbf{Why store the centrifugal potential in \texttt{gh}.}
+Both gravity and the centrifugal acceleration of the rotating frame are
+conservative body forces and can therefore be absorbed into a single
+hydrostatic potential, with their density-fluctuation counterparts
+retained as the buoyancy drivers. This is the classical construction
+for rotating Boussinesq flows (Chandrasekhar 1961; Lopez, Marques \&
+Avila 2013): explicitly,
+\(-\rho_0\,\boldsymbol{\Omega}\times(\boldsymbol{\Omega}\times\mathbf{r})
+= \nabla\!\bigl(\tfrac12\rho_0|\boldsymbol{\Omega}\times\mathbf{r}|^2\bigr)\)
+is absorbed into the pressure gradient, leaving
+\(-\rho'\,\boldsymbol{\Omega}\times(\boldsymbol{\Omega}\times\mathbf{r})\)
+to drive centrifugal buoyancy. In \texttt{centriMembSolver} we realise
+this within OpenFOAM's existing \texttt{gh}/\texttt{p\_rgh}
+infrastructure (Eq.~\eqref{eq:gh_def}); only the non-conservative
+Coriolis term remains as an explicit source in the momentum equation.
+The practical motivation is numerical conditioning: at high rotation
+rates the centrifugal hydrostatic pressure can dominate the absolute
+pressure field by orders of magnitude (\(\sim 60\) bar in
+high-throughput screening cartridges), and absorbing it into
+\texttt{p\_rgh} keeps the pressure–velocity coupling well conditioned.
+
+\paragraph{Modified pressure \(p_{\mathrm{rgh}}\)}
+
+In the solver, the physical pressure is reconstructed from the three
+fields \texttt{p\_rgh}, \texttt{gh} and \texttt{rhok} as
+\begin{equation}
+	p(\boldsymbol{x})
+	=
+	\rho_0\bigl(
+	p_{\mathrm{rgh}}(\boldsymbol{x})
+	+ \rho_k(\boldsymbol{x})\,\mathrm{gh}(\boldsymbol{x})
+	\bigr)
+	+ p_{\mathrm{ref}},
+	\label{eq:p_reconstruct}
+\end{equation}
+where \(p_{\mathrm{rgh}}\) corresponds to the OpenFOAM field
+\texttt{p\_rgh} and \(p_{\mathrm{ref}}\) is a constant reference pressure.
+
+Neglecting the constant \(p_{\mathrm{ref}}/\rho_0\), this can be
+rearranged as
+\begin{equation}
+	p_{\mathrm{rgh}}
+	=
+	\frac{p}{\rho_0}
+	- \rho_k\,\mathrm{gh}.
+	\label{eq:p_rgh_def}
+\end{equation}
+
+Thus \(p_{\mathrm{rgh}}\) represents the \emph{dynamic} part of the
+pressure: the large hydrostatic background is removed and only the
+smaller fluctuations are handled by the linear solver.
+
+\paragraph{Momentum equation in \(p_{\mathrm{rgh}}\) form}
+
+Applying the Boussinesq approximation as stated above (\(\rho\to\rho_0\)
+in inertia, viscous and Coriolis terms; \(\rho=\rho_0\rho_k\) retained
+only in the body--force term), the incompressible rotating--frame
+Navier--Stokes equation becomes
+\begin{equation}
+	\rho_0
+	\left(
+	\frac{\partial \boldsymbol{U}}{\partial t}
+	+ \boldsymbol{U}\cdot\nabla\boldsymbol{U}
+	+ 2\,\boldsymbol{\Omega}\times\boldsymbol{U}
+	\right)
+	=
+	-\nabla p
+	+ \nabla\cdot\bigl(\mu_{\mathrm{eff}}\nabla\boldsymbol{U}\bigr)
+	+ \rho_0\rho_k\,\boldsymbol{a}_{\mathrm{eff}}.
+	\label{eq:NS_raw}
+\end{equation}
+
+\paragraph{Step-by-step transformation to the \(p_{\mathrm{rgh}}\)-based form}
+
+Using the definition \eqref{eq:p_rgh_def},
+\[
+p
+= \rho_0\left(p_{\mathrm{rgh}} + \rho_k\,\mathrm{gh}\right),
+\]
+the pressure gradient becomes
+\begin{align}
+	-\nabla p
+	&= -\rho_0 \nabla\!\left(p_{\mathrm{rgh}} + \rho_k\,\mathrm{gh}\right)
+	\nonumber\\
+	&= -\rho_0\nabla p_{\mathrm{rgh}}
+	-\rho_0\nabla(\rho_k\,\mathrm{gh}).
+\end{align}
+Applying the product rule,
+\begin{equation}
+	\nabla(\rho_k\,\mathrm{gh})
+	=
+	\mathrm{gh}\,\nabla\rho_k
+	+
+	\rho_k\,\nabla(\mathrm{gh})
+	=
+	\mathrm{gh}\,\nabla\rho_k
+	+
+	\rho_k\,\boldsymbol{a}_{\mathrm{eff}},
+\end{equation}
+where we used \(\nabla(\mathrm{gh}) = \boldsymbol{a}_{\mathrm{eff}}\).
+Thus
+\begin{equation}
+	-\nabla p
+	=
+	-\rho_0\nabla p_{\mathrm{rgh}}
+	-\rho_0\,\mathrm{gh}\,\nabla\rho_k
+	-\rho_0\rho_k\,\boldsymbol{a}_{\mathrm{eff}}.
+	\label{eq:pressure_expanded}
+\end{equation}
+
+Substituting \eqref{eq:pressure_expanded} into \eqref{eq:NS_raw} and
+cancelling the \(\rho_0\rho_k\,\boldsymbol{a}_{\mathrm{eff}}\) terms on
+both sides yields
+\begin{equation}
+	\rho_0
+	\left(
+	\frac{\partial \boldsymbol{U}}{\partial t}
+	+ \boldsymbol{U}\cdot\nabla\boldsymbol{U}
+	+ 2\,\boldsymbol{\Omega}\times\boldsymbol{U}
+	\right)
+	=
+	- \rho_0\nabla p_{\mathrm{rgh}}
+	- \rho_0\,\mathrm{gh}\,\nabla\rho_k
+	+ \nabla\cdot\bigl(\mu_{\mathrm{eff}}\nabla\boldsymbol{U}\bigr).
+	\label{eq:NS_prgh_rho0}
+\end{equation}
+
+Since \(\rho_0\) is constant, we can divide the entire equation by
+\(\rho_0\) and introduce the effective kinematic viscosity
+\(\nu_{\mathrm{eff}} = \mu_{\mathrm{eff}}/\rho_0\) to obtain the
+canonical form used in the solver:
+\begin{equation}
+	\frac{\partial \boldsymbol{U}}{\partial t}
+	+ \boldsymbol{U}\cdot\nabla\boldsymbol{U}
+	+ 2\,\boldsymbol{\Omega}\times\boldsymbol{U}
+	=
+	- \nabla p_{\mathrm{rgh}}
+	- \mathrm{gh}\,\nabla\rho_k
+	+ \nabla\cdot\bigl(\nu_{\mathrm{eff}}\nabla\boldsymbol{U}\bigr).
+	\label{eq:NS_prgh}
+\end{equation}
+Note that \(\nu_{\mathrm{eff}} = \nu(C_A) + \nu_t\) is retained
+\emph{inside} the divergence operator because the molecular kinematic
+viscosity \(\nu(C_A)\) is concentration--dependent (Eq.~(8)).
+
+The hydrostatic load has disappeared from the unknown pressure
+(\(p_{\mathrm{rgh}}\)), and only the term proportional to
+\(\nabla\rho_k\) remains as a Boussinesq buoyancy force.
+
+\paragraph{Discrete buoyancy term in \texttt{centriMembSolver}}
+
+The continuous term
+\(-\,\mathrm{gh}\,\nabla\rho_k\)
+is discretised in OpenFOAM using face–based gradients:
+\begin{equation}
+	-\,\mathrm{gh}\,\nabla\rho_k
+	\quad\Longrightarrow\quad
+	-\,\mathrm{gh}_f\,\mathrm{snGrad}(\rho_k),
+\end{equation}
+where \(\mathrm{gh}_f\) is the potential field interpolated to the
+faces, and \(\mathrm{snGrad}(\rho_k)\) is the surface–normal gradient of
+\(\rho_k\). In the actual code this appears as
+\begin{verbatim}
+	- ghf * fvc::snGrad(rhok)
+\end{verbatim}
+inside the reconstruction of the right–hand side of the momentum
+equation.
+
+\paragraph{Summary and physical interpretation}
+
+\begin{itemize}
+	\item \(\mathrm{gh}\) is the hydrostatic potential per unit mass:
+	it combines gravitational and centrifugal contributions and is
+	computed from geometry, \(\boldsymbol{g}\) and \(\boldsymbol{\Omega}\).
+	\item \(\rho_k\) (field \texttt{rhok}) encodes density variations
+	relative to \(\rho_0\) and is responsible for Boussinesq
+	buoyancy.
+	\item \(p_{\mathrm{rgh}}\) (field \texttt{p\_rgh}) is the pressure
+	variable actually solved by PIMPLE; its gradients are much
+	smaller than those of the physical pressure \(p\).
+	\item The buoyancy force appears as
+	\(-\,\mathrm{gh}\,\nabla\rho_k\), discretised in the code
+	as \texttt{- ghf*fvc::snGrad(rhok)}.
+	\item The physical pressure used for membrane transport and
+	post–processing is reconstructed via \eqref{eq:p_reconstruct}.
+\end{itemize}
+
+\subsubsection{Turbulence modelling}
+
+Although centrifugal membrane filtration can operate in laminar,
+transitional or weakly turbulent regimes, \texttt{centriMembSolver}
+allows the user to select any turbulence model available in the
+\texttt{RASModel} hierarchy of OpenFOAM.  The model is instantiated via
+the usual run-time selection mechanism in \texttt{createFields.H}:
+\begin{equation}
+	\nu_{\mathrm{eff}}
+	= \nu + \nu_t(\mathbf{U}, k, \varepsilon, \dots).
+\end{equation}
+
+Typical configurations rely on:
+\begin{itemize}
+	\item direct laminar modelling (\texttt{simulationType laminar;})
+	\item one–equation eddy–viscosity models such as Spalart–Allmaras
+	\item two–equation models such as standard or low-Re \(k{-}\varepsilon\)
+	~and \(k{-}\omega\)
+\end{itemize}
+with parameters defined in \texttt{constant/turbulenceProperties}.
+Turbulent mass transport uses an eddy diffusivity
+\(D_t = \nu_t / \mathrm{Sc}_t\), where \(\mathrm{Sc}_t\) is the turbulent
+Schmidt number.
+
+\subsubsection{Concentration-dependent viscosity}
+
+Many aqueous solute solutions (salts, sugars, cryoprotectants,
+cryoprotectant carriers) exhibit a strong dependence of viscosity on
+the solute concentration \(C_A\).  \texttt{centriMembSolver}
+incorporates a polynomial parameterisation:
+\begin{equation}
+	\nu(C_A) = \nu_0 + \nu_1 C_A + \nu_2 C_A^2 + \cdots,
+\end{equation}
+with coefficients \(\nu_0,\nu_1,\nu_2\) set in
+\texttt{transportProperties}.  A clipping operator prevents unphysical
+values at high concentrations.
+
+
+
+\subsection{Solute and tracer transport}
+
+In the current release, the solver solves two advective–diffusive transport equations: one for a primary solute concentration \(C_A\) and one for a passive tracer concentration \(C_T\). Both species are advected by the same velocity field \(\mathbf{U}\) but may have different diffusion coefficients.  The governing equations read
+\begin{align}
+  \frac{\partial C_A}{\partial t} + \nabla\cdot(C_A\mathbf{U}) &= \nabla\cdot(D_{A,\mathrm{eff}}\,\nabla C_A),\\[0.5ex]
+  \frac{\partial C_T}{\partial t} + \nabla\cdot(C_T\mathbf{U}) &= \nabla\cdot(D_{T,\mathrm{eff}}\,\nabla C_T),
+\end{align}
+where \(D_{A,\mathrm{eff}} = D_{AB}(C_A) + D_t\) is the effective diffusivity of the solute including the concentration–dependent molecular diffusivity \(D_{AB}\) and a turbulent contribution \(D_t\) (if enabled), and \(D_{T,\mathrm{eff}} = D_{T,0} + D_t\) is the effective diffusivity of the tracer with \(D_{T,0}\) constant and independent of concentration. Membrane boundary conditions for the solute and tracer are described in \S\ref{sec:bc-solute} and \S\ref{sec:bc-tracer}, respectively.
+
+\subsection{Coriolis treatment in PIMPLE}
+\label{sec:coriolis}
+
+The Coriolis pseudo-force \(\mathbf{f}_{C} = -2\,\boldsymbol{\Omega}\times\mathbf{U}\)
+is non-conservative and is therefore added explicitly to the momentum
+equation as a source term, evaluated with the velocity available at
+the current PIMPLE outer iteration
+\(\mathbf{U}^{(k)}\):
+\begin{equation}
+	\mathbf{f}_{C}^{\,(k)} = -2\,\boldsymbol{\Omega}\times\mathbf{U}^{(k)} .
+	\label{eq:coriolis-explicit}
+\end{equation}
+The explicit treatment is appropriate at the small time steps imposed
+by the convective CFL constraint of DNS in rotating membrane systems
+and avoids the additional matrix structure that an implicit
+discretisation would require. For DNS runs the
+\texttt{momentumPredictor} is disabled to avoid spurious Courant
+excursions in strongly rotating flows; a single outer corrector per
+time step is normally sufficient under the CFL-bounded \(\Delta t\).
+The corresponding code-level snippet is shown together with the rest
+of the momentum loop in \S\ref{sec:solver-structure}.
+
+\section{Membrane Boundary Conditions}
+
+Membrane patches couple the feed region to the permeate side by
+imposing fluxes of solvent and solute according to physical models.
+\texttt{centriMembSolver} implements two specialised patch field
+classes: \texttt{membraneSolventFluxFvPatchVectorField} for the
+velocity and \texttt{membraneSoluteFluxFvPatchScalarField} for the
+concentration.  The feed side of the membrane is the patch
+corresponding to the field values; permeate side conditions are
+either fixed (for constant pressure/concentration) or inferred from
+the flux law.
+
+\subsection{Membrane physics}
+\label{sec:bc-theory}
+
+This subsection collects all the membrane-transport physics that
+underlies the implementations of \S\ref{sec:bc-solvent}--\S\ref{sec:bc-tracer}.
+It can be skipped on a first reading by users who only want dictionary
+syntax; the implementation subsections forward-reference equations
+defined here when needed.
+
+\paragraph{Driving forces and osmotic pressure.}
+Transmembrane transport is driven by hydrostatic
+\(\Delta p = p_f - p_p\) and osmotic
+\(\Delta\pi = \pi(C_f) - \pi(C_p)\) differences. The osmotic pressure
+is represented by a virial expansion in solute concentration,
+\begin{equation}
+	\pi(C_A) = \sum_{k=1}^{N} a_k\,C_A^k ,
+	\label{eq:osmotic-virial}
+\end{equation}
+with mass-based coefficients \(a_k\) of units
+\si{Pa.m^{3k}.kg^{-k}} (\(C_A\) in \si{kg.m^{-3}}). At infinite
+dilution the linear coefficient reduces to the van~'t~Hoff value
+\(a_1 = i\,RT/M\), where \(i\) is the dissociation factor, \(R\) the
+gas constant, \(T\) absolute temperature, and \(M\) the solute molar
+mass; the higher-order \(a_k\) capture deviations from ideality.
+
+\paragraph{Spiegler--Kedem solvent flux.}
+The solvent (water) flux \(J_v\) [m/s] follows
+\begin{equation}
+	J_v = A_h\bigl(\Delta p - \sigma\,\Delta\pi\bigr),
+	\label{eq:jv-s-k}
+\end{equation}
+with hydraulic permeability \(A_h\) (dictionary key \texttt{Ah}) and
+reflection coefficient \(\sigma\) (dictionary key \texttt{sigma}).
+
+\paragraph{Kedem--Katchalsky solute flux.}
+The solute mass flux \(J_s\) [kg\,(m\(^2\)\,s)\(^{-1}\)] is given by
+\begin{equation}
+	J_s = (1 - \sigma)\,J_v\,C_w + B\,(C_w - C_p),
+	\label{eq:js-s-k}
+\end{equation}
+where \(B\) is the intrinsic solute permeability (dictionary key
+\texttt{B}), \(C_w\) the wall concentration on the feed side, and
+\(C_p\) the permeate concentration. The intrinsic rejection
+coefficient is, by definition,
+\begin{equation}
+	R_\mathrm{int} \equiv 1 - C_p/C_w .
+	\label{eq:Rint-def}
+\end{equation}
+
+\paragraph{Local mass balance at the membrane face.}
+The membrane patch separates a feed-side bulk fluid (resolved by the
+DNS) from a permeate side. At the wall, the convective influx of
+solute, the diffusive removal back into the bulk feed, and the
+permeate outflux must balance:
+\begin{equation}
+	J_v\,C_w \;-\; D_A\,\frac{\partial C_A}{\partial n}\bigg|_{w}
+	\;=\; J_s \;=\; J_v\,C_p ,
+	\label{eq:bc-balance}
+\end{equation}
+where \(\partial/\partial n\) is the outward normal derivative on the
+feed-side patch (\texttt{snGrad} in OpenFOAM, defined as
+\((C_w - C_i)/\delta_n\) for the cell adjacent to the face, with
+\(\delta_n\) the cell-centre--to--face distance). Equation
+\eqref{eq:bc-balance} couples \(C_w\) to the resolved interior
+field; it makes \emph{no} use of a phenomenological mass-transfer
+coefficient because the boundary layer is resolved by the DNS.
+
+The \emph{closure} required to solve \eqref{eq:bc-balance} for
+\(C_w\) is provided differently by the two membrane-physics
+specialisations:
+\begin{itemize}
+	\item \textbf{Intrinsic-rejection closure.}
+	The membrane is assumed to reject a fixed fraction
+	\(R_\mathrm{int}\) of the solute regardless of operating point,
+	\begin{equation}
+		C_p = (1 - R_\mathrm{int})\,C_w .
+		\label{eq:Cp-from-Rint}
+	\end{equation}
+	Substituting \eqref{eq:Cp-from-Rint} into \eqref{eq:bc-balance}
+	gives the Robin-type relation
+	\begin{equation}
+		D_A\,\frac{\partial C_A}{\partial n}\bigg|_{w}
+		= R_\mathrm{int}\,J_v\,C_w .
+		\label{eq:Rint-Robin}
+	\end{equation}
+
+	\item \textbf{Solute-permeability (Spiegler--Kedem) closure.}
+	Combining the SK solute flux \eqref{eq:js-s-k} with
+	\(J_s = J_v\,C_p\) and solving for \(C_p\) gives
+	\begin{equation}
+		C_p = \frac{B + (1-\sigma)\,J_v}{B + J_v}\,C_w
+		    \;\equiv\; \alpha(J_v;\sigma,B)\,C_w ,
+		\label{eq:Cp-from-SK}
+	\end{equation}
+	so that the effective intrinsic rejection of an SK membrane is
+	\(R_\mathrm{int}^{(\mathrm{SK})}(J_v) = 1 - \alpha = \sigma\,J_v/(B+J_v)\).
+	Substituting \eqref{eq:Cp-from-SK} into \eqref{eq:bc-balance}
+	gives the corresponding Robin relation
+	\begin{equation}
+		D_A\,\frac{\partial C_A}{\partial n}\bigg|_{w}
+		= \frac{\sigma\,J_v^{\,2}}{B + J_v}\,C_w .
+		\label{eq:SK-Robin}
+	\end{equation}
+\end{itemize}
+
+\paragraph{Implementation as a Robin (mixed) boundary condition.}
+Both \eqref{eq:Rint-Robin} and \eqref{eq:SK-Robin} have the canonical
+Robin form
+\begin{equation}
+	k\,(C_w - C_i) \;=\; h_\mathrm{phys}\,C_w ,
+	\qquad
+	k \equiv D_A/\delta_n ,
+	\label{eq:robin-canonical}
+\end{equation}
+with
+\(h_\mathrm{phys} = R_\mathrm{int}\,J_v\) (intrinsic-rejection closure)
+or
+\(h_\mathrm{phys} = \sigma\,J_v^{\,2}/(B + J_v)\)
+(solute-permeability closure). Solving for \(C_w\),
+\begin{equation}
+	C_w \;=\; \frac{k}{k - h_\mathrm{phys}}\,C_i .
+	\label{eq:Cw-closed}
+\end{equation}
+In OpenFOAM this is realised through the
+\texttt{mixedFvPatchScalarField} machinery, which evaluates the wall
+value as
+\(C_w = \alpha_\mathrm{vF}\,C_\mathrm{ref} + (1-\alpha_\mathrm{vF})\,(C_i + g\,\delta_n)\).
+With reference value and reference gradient set to zero, the
+implementation reproduces \eqref{eq:Cw-closed} by setting
+\begin{equation}
+	\alpha_\mathrm{vF} \;=\; -\,\frac{h_\mathrm{phys}}{k - h_\mathrm{phys}} ,
+\end{equation}
+which is \emph{negative-valued by construction} under physical
+operating conditions
+(\(0 < h_\mathrm{phys} < k\)). The OpenFOAM identifier
+\texttt{valueFraction} therefore stores an algebraic Robin weight
+rather than a fraction in \([0,1]\), and negative values are correct.
+
+\paragraph{Three modeling choices per species.}
+Equations \eqref{eq:jv-s-k}--\eqref{eq:js-s-k} contain four membrane
+parameters: \(A_h\), \(\sigma\), \(B\), and the rejection (linked to
+\(\sigma\) and \(B\) via \eqref{eq:Rint-def}). Different experimental
+scenarios fix different combinations of these parameters, and
+\texttt{centriMembSolver} therefore offers three modeling choices per
+species:
+\begin{itemize}
+	\item Solvent flux (\(\mathbf{U}\) BC, \S\ref{sec:bc-solvent}): the
+	Spiegler--Kedem model fixes \(A_h\) and \(\sigma\); the
+	constant-flux model fixes \(J_v\) directly; the
+	target-average-flux model tunes \(A_h\) on-the-fly to match a
+	prescribed \(\langle J_v\rangle\).
+	\item Solute flux (\(C_A\) BC, \S\ref{sec:bc-solute}): the
+	intrinsic-rejection model fixes \(R_\mathrm{int}\) and uses
+	\eqref{eq:Rint-Robin}; the solute-permeability model fixes
+	\(B\) (and optionally \(\sigma\)) and uses \eqref{eq:SK-Robin};
+	the observed-rejection model tunes \(R_\mathrm{int}\)
+	on-the-fly to match a prescribed \(R_\mathrm{obs}\).
+	\item Tracer flux (\(C_T\) BC, \S\ref{sec:bc-tracer}): same three
+	options applied to a passive tracer with its own constant
+	diffusivity \(D_T\) and parameters
+	(\(R_{T,\mathrm{int}}\), \(B_T\), \(\sigma_T\)).
+\end{itemize}
+
+\subsection{Solvent flux boundary (\texttt{U})}
+\label{sec:bc-solvent}
+The solvent flux condition determines the normal component of
+\(\mathbf{U}\) at the membrane.  Three models are provided.  In all
+three the local solvent flux is clipped to non-negative values,
+\(J_v \leftarrow \max(0, J_v)\), so that the membrane never admits
+permeate-to-feed back-flow during transient or extreme conditions;
+this safeguard never affects steady-state results in the validated
+operating envelope but stabilises early-time behaviour while the
+dynamic pressure has not yet established.
+
+\paragraph{Spiegler–Kedem model.}
+Implements Eq.~\eqref{eq:jv-s-k}.  Dictionary entries include the
+hydraulic permeability \texttt{Ah}, the reflection coefficient
+\texttt{sigma}, virial coefficients \texttt{virialCoeffs} for the
+osmotic pressure (with \(C_A\) in \si{kg/m^3} and \(\pi\) in
+\si{Pa}), and an optional permeate-side pressure reference
+\texttt{pPermConst}.  The example below sets
+\texttt{Ah = 0.5e-11}, \texttt{sigma = 1.0} and a virial expansion
+of the form \(\pi(C_A) = a_1 C_A + a_2 C_A^2\):
+
+\begin{verbatim}
+membraneA
+{
+    type    membraneSolventFlux;
+    model   SpieglerKedem;
+    Ah      0.5e-11;        // [m/(Pa s)]
+    sigma   1.0;            // [-]
+    virialCoeffs (2.5e3 0); // a1 [Pa m3 kg-1], a2 [Pa m6 kg-2]
+    pPermConst 0;           // [Pa]
+    value  uniform (0 0 0);
+}
+\end{verbatim}
+
+\paragraph{Constant flux model.}
+Prescribes a uniform solvent flux \(J_v\) independent of driving
+forces.  Useful for benchmarking and when the membrane permeability is
+unknown.  Example:
+\begin{verbatim}
+membraneA
+{
+    type    membraneSolventFlux;
+    model   constantFlux;
+    Jv      3.0e-5;        // [m/s]
+    value   uniform (0 0 0);
+}
+\end{verbatim}
+
+\paragraph{Target average flux model.}
+Tunes an effective permeability \(A_h^*\) such that the area-averaged
+flux matches a target \texttt{JvAverage}.  Driving forces are still
+proportional to \(\Delta p - \sigma\Delta\pi\) as in Spiegler--Kedem,
+but \(A_h^*\) is updated each time step within user-specified bounds
+\texttt{AhMin} and \texttt{AhMax}.  Particularly useful for calibrating
+models against a measured average permeate flux.  Example:
+\begin{verbatim}
+membraneA
+{
+    type        membraneSolventFlux;
+    model       targetAverageFlux;
+    JvAverage   3.0e-5;        // target <Jv> [m/s]
+    AhMin       1.0e-13;       // lower bound on A_h^* [m/(Pa s)]
+    AhMax       1.0e-9;        // upper bound on A_h^*
+    sigma       1.0;
+    virialCoeffs (7314.5 8.253);
+    pPermConst  0;
+    value       uniform (0 0 0);
+}
+\end{verbatim}
+
+\paragraph{Diagnostics.}
+For each membrane patch the solver writes the instantaneous and
+time–windowed area–average of \(J_v\).  If window averaging is
+enabled (\texttt{windowAverage true}), the time scale \texttt{Twindow}
+sets the averaging duration.  The internal field \texttt{Jv} is
+available for further post–processing.
+
+\subsection{Solute flux boundary (\texttt{CA})}
+\label{sec:bc-solute}
+The solute boundary condition couples the solute transport to the
+solvent flux through the local mass balance derived in
+\S\ref{sec:bc-theory} (Eqs.~\eqref{eq:bc-balance} and following), and
+is implemented as an OpenFOAM \texttt{mixedFvPatchScalarField} (Robin
+BC). Three modeling closures are available.
+
+\paragraph{Intrinsic rejection model.}
+Fixes \(R_\mathrm{int}\) directly; uses Eqs.~\eqref{eq:Cp-from-Rint}
+and~\eqref{eq:Rint-Robin}. Dictionary entries: \texttt{model
+intrinsicRejection}, \texttt{Rint}, and the reference bulk
+concentration \texttt{CAb} used for the polarisation diagnostic
+\(\Gamma\).
+
+\paragraph{Solute permeability model.}
+Fixes the solute permeability \(B\) (and optionally \(\sigma\)); uses
+Eqs.~\eqref{eq:Cp-from-SK} and~\eqref{eq:SK-Robin}. Reduces to a
+solution--diffusion model when \(\sigma = 0\). If \texttt{sigma} is
+specified it overrides the reflection coefficient from the solvent
+BC; otherwise \(\sigma\) is inherited from the solvent BC on
+\texttt{U}, defaulting to \(1\) if no membrane solvent BC is found.
+Dictionary entries: \texttt{model solutePermeability}, \texttt{B},
+optionally \texttt{sigma}, and \texttt{CAb}.
+
+\paragraph{Observed rejection model.}
+Targets a prescribed observed rejection
+\begin{equation}
+	R_\mathrm{obs} \;=\; 1 - \frac{\langle J_v C_p \rangle}{\langle J_v \rangle\,C_b} ,
+	\label{eq:Robs-def}
+\end{equation}
+where \(\langle\cdot\rangle\) denotes an area average and \(C_b\) is
+the bulk reference concentration. The solver iteratively determines
+an intrinsic rejection \(R_\mathrm{int}\) such that
+\(R_\mathrm{obs}\) matches the target within a specified tolerance,
+applying Eq.~\eqref{eq:Rint-Robin} face-by-face with the inferred
+\(R_\mathrm{int}\). Dictionary entries: \texttt{model
+observedRejection}, \texttt{Robs} (target), \texttt{RintMin},
+\texttt{RintMax}, \texttt{tol}, \texttt{maxIter}, and \texttt{CAb}.
+Useful when matching experimental rejection measurements.
+
+\paragraph{Diagnostics.}
+Per-face fluxes \(J_s\), \(J_v\) and permeate concentration \(C_p\)
+are exposed via the patch fields \texttt{Js}, \texttt{Jv}, and
+\texttt{CAp}, and logged in
+\texttt{postProcessing/membraneSoluteFlux/<patch>/Rint\_vs\_time.dat}
+(columns: \emph{time}, \(R_\mathrm{int}\), \(R_\mathrm{obs}\)). The
+solver also writes the local concentration polarisation factor
+\(\Gamma = (C_w - C_b)/C_b\) to the volume field \texttt{Gama}.
+
+
+\subsection{Tracer flux boundary (\texttt{CT})}
+\label{sec:bc-tracer}
+The tracer boundary condition reuses the same Robin BC machinery
+described in \S\ref{sec:bc-theory} (Eqs.~\eqref{eq:bc-balance}--\eqref{eq:Cw-closed}),
+applied to the passive tracer field \(C_T\) with diffusivity \(D_T\)
+and tracer-specific parameters \(R_{T,\mathrm{int}}\), \(B_T\),
+\(\sigma_T\). All operations on \(C_T\) are independent of those on
+\(C_A\); the only coupling is through the shared solvent flux
+\(J_v\). Three modeling closures are available, in direct analogy to
+the solute case.
+
+\paragraph{Intrinsic rejection model.}
+Tracer counterpart of \eqref{eq:Cp-from-Rint} and
+\eqref{eq:Rint-Robin}: \(C_{T,p} = (1 - R_{T,\mathrm{int}})\,C_{T,w}\)
+and \(D_T\,\partial C_T/\partial n|_{w} = R_{T,\mathrm{int}}\,J_v\,C_{T,w}\).
+Dictionary entries: \texttt{model intrinsicRejection},
+\texttt{RTint}, \texttt{CTb}.
+
+\paragraph{Solute permeability model.}
+Tracer counterpart of the SK closure
+\eqref{eq:Cp-from-SK}--\eqref{eq:SK-Robin} with \((\sigma, B)\)
+replaced by \((\sigma_T, B_T)\). When \texttt{sigmaT} is omitted, the
+default is \(\sigma_T = 1\) (full rejection of the tracer); unlike
+the solute case, \(\sigma_T\) is \emph{not} inherited from the
+solvent BC, since the reflection coefficient of a passive tracer is
+generally unrelated to that of the primary solute. Dictionary
+entries: \texttt{model solutePermeability}, \texttt{BT}, optionally
+\texttt{sigmaT}, \texttt{CTb}.
+
+\paragraph{Observed rejection model.}
+Tracer counterpart of \eqref{eq:Robs-def}, with \((C_p, C_b)\)
+replaced by \((C_{T,p}, C_{T,b})\). The solver iteratively determines
+\(R_{T,\mathrm{int}}\) such that the achieved
+\(R_{T,\mathrm{obs}}\) matches a prescribed target. Dictionary
+entries: \texttt{model observedRejection}, \texttt{RTobs},
+\texttt{RTintMin}, \texttt{RTintMax}, \texttt{tol}, \texttt{maxIter},
+\texttt{CTb}.
+
+\paragraph{Tracer dictionary example.}
+\begin{verbatim}
+membraneB
+{
+    type     membraneTracerFlux;
+    model    intrinsicRejection;
+    RTint    1.0;          // perfectly rejected tracer
+    CTb      1.0e-3;       // reference [kg/m^3]
+    value    uniform 0;
+}
+\end{verbatim}
+
+\paragraph{Diagnostics.}
+Per-face tracer flux \(J_{s,T}\), solvent flux \(J_v\) and permeate tracer concentration \(C_{T,p}\) are exposed via the patch fields \texttt{JsT}, \texttt{Jv} and \texttt{CTp}.  The solver writes the observed tracer rejection and concentration polarisation factor \(\Gamma_T = (C_{T,w}-C_{T,b})/C_{T,b}\) to the summary files for post-processing.
+
+\subsection{Membrane patch dictionaries}
+
+
+Tables~\ref{tab:membrane-solvent} and~\ref{tab:membrane-solute}
+summarise the principal dictionary entries for solvent and solute
+boundary conditions.  Most values default to physically reasonable
+numbers; only those shown as required must be provided.
+
+\begin{table}[h]
+  \centering
+  \caption{Summary of membrane solvent flux boundary entries.}
+  \label{tab:membrane-solvent}
+  \begin{tabular}{@{}llp{8cm}@{}}
+    \toprule
+    Key & Units & Description\\
+    \midrule
+    \texttt{model} & – & \texttt{SpieglerKedem}, \texttt{constantFlux} or \texttt{targetAverageFlux}\\
+    \texttt{Ah} & \si{m/(Pa\,s)} & Hydraulic permeability for Spiegler–Kedem\\
+    \texttt{sigma} & – & Reflection coefficient \(\sigma\); defaults to 1\\
+    \texttt{virialCoeffs} & \si{Pa\,m^{3k}\,kg^{-k}} & List \((a_1,a_2,\dots)\) for osmotic pressure $\pi(C_A)=\sum_k a_k C_A^k$ ($a_1$ in \si{Pa\,m^3\,kg^{-1}}, $a_2$ in \si{Pa\,m^6\,kg^{-2}}, etc.)\\
+    \texttt{Jv} & \si{m/s} & Constant flux magnitude (constantFlux model)\\
+    \texttt{JvAverage} & \si{m/s} & Target area–average flux (targetAverageFlux)\\
+    \texttt{AhMin}, \texttt{AhMax} & \si{m/(Pa\,s)} & Limits on tuned permeability\\
+    \texttt{pPermConst} & \si{Pa} & Permeate-side reference pressure (default 0)\\
+    \texttt{windowAverage}, \texttt{Twindow} & – & Enable and set window for time–averaged output\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{Summary of membrane solute flux boundary entries.}
+  \label{tab:membrane-solute}
+  \begin{tabular}{@{}llp{8cm}@{}}
+    \toprule
+    Key & Units & Description\\
+    \midrule
+    \texttt{model} & – & \texttt{intrinsicRejection}, \texttt{solutePermeability} or \texttt{observedRejection}\\
+    \texttt{Rint} & – & Intrinsic rejection coefficient (intrinsicRejection)\\
+    \texttt{B} & \si{m/s} & Solute permeability (solutePermeability)\\
+    \texttt{sigma} & – & Optional reflection coefficient (overrides solvent BC; default 1)\\
+    \texttt{Robs} & – & Target observed rejection (observedRejection)\\
+    \texttt{CAb} & \si{kg/m^3} & Reference bulk concentration for diagnostics\\
+    \texttt{RintMin}, \texttt{RintMax} & – & Bounds for inverse rejection search\\
+    \texttt{tol}, \texttt{maxIter} & – & Tolerance and maximum iterations for secant/bisection\\
+    \texttt{UName} & – & Name of velocity field (defaults to \texttt{U})\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{Summary of membrane tracer flux boundary entries.}
+  \label{tab:membrane-tracer}
+  \begin{tabular}{@{}llp{8cm}@{}}
+    \toprule
+    Key & Units & Description\\
+    \midrule
+    \texttt{model} & -- & \texttt{intrinsicRejection}, \texttt{solutePermeability} or \texttt{observedRejection}\\
+    \texttt{RTint} & -- & Intrinsic tracer rejection coefficient (intrinsicRejection)\\
+    \texttt{BT} & \si{m/s} & Tracer permeability (solutePermeability)\\
+    \texttt{sigmaT} & -- & Optional tracer reflection coefficient (default 1; full rejection)\\
+    \texttt{RTobs} & -- & Target observed tracer rejection (observedRejection)\\
+    \texttt{CTb} & \si{kg/m^3} & Reference bulk tracer concentration for diagnostics\\
+    \texttt{RTintMin}, \texttt{RTintMax} & -- & Bounds for inverse rejection search\\
+    \texttt{tol}, \texttt{maxIter} & -- & Tolerance and maximum iterations for secant/bisection\\
+    \texttt{UName} & -- & Name of velocity field (defaults to \texttt{U})\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+% ===========================================================================
+
+
+\section{Solver structure and implementation}
+\label{sec:solver-structure}
+
+The \texttt{centriMembSolver} follows a PIMPLE--type pressure--velocity
+coupling, extended with (i) concentration--dependent transport
+properties, (ii) a rotating reference frame, and (iii) custom membrane
+boundary conditions and diagnostics. The overall time loop is driven by
+\texttt{runTime.run()}, and at each time step a nested PIMPLE loop
+solves momentum, pressure and solute transport. Additional headers
+perform pressure reconstruction and conservation monitoring before the
+fields are written.
+
+\subsection{Overall time loop and custom PIMPLE algorithm}
+
+For readers familiar with C++, the main structure of
+\texttt{centriMembSolver.C} can be summarised schematically as
+
+\begin{verbatim}
+	createTime;
+	createMesh;
+	createFields;               // U, p_rgh, CA, Js, Jv, CAp, Gama,
+	                            // and tracer fields (CT, DT, JsT,
+	                            // CTp, GamaT) if solveTracer=true
+	createPimpleControl;        // pimpleControl
+	createRDeltaT;              // LTS auto-detection (sets bool LTS)
+	updateTransportProperties;  // nu(CA), DAB(CA), rhok
+
+	while (runTime.run())
+	{
+		// LTS or CFL-based time-step control
+		if (LTS) { #include "setRDeltaT.H" }
+		else     { #include "CourantNo.H"; #include "setDeltaT.H" }
+
+		++runTime;
+		Info<< "Time = " << runTime.timeName() << endl;
+
+		while (pimple.loop())           // outer PIMPLE loop
+		{
+			#include "UEqn.H"           // assemble & solve momentum
+			#include "CAEqn.H"          // assemble & solve solute
+			#include "updateTransportProperties.H"
+
+			while (pimple.correct())    // inner pressure loop
+			{
+				#include "pEqn.H"
+			}
+
+			if (pimple.turbCorr())
+			{
+				turbulence->correct();
+			}
+		}
+
+		#include "CTEqn.H"
+		#include "pReconstruct.H"
+		#include "monitorConservation.H"
+		#include "Gama.H"
+		#include "GamaT.H"
+
+		runTime.write();
+		runTime.printExecutionTime(Info);
+	}
+\end{verbatim}
+
+Compared with a ``standard'' OpenFOAM transient solver:
+
+\begin{itemize}
+	\item momentum \texttt{(UEqn.H)} and solute \texttt{(CAEqn.H)} are
+	solved together at the beginning of each PIMPLE outer iteration;
+	\item transport properties (viscosity, diffusivity, density) are
+	updated \emph{inside} the PIMPLE loop via
+	\texttt{updateTransportProperties.H}, so they respond
+	iteratively to the current concentration field;
+	\item several post--processing steps (absolute pressure, conservation,
+	membrane diagnostic \(\Gamma\), body forces) are executed at the
+	end of every time step.
+\end{itemize}
+
+This design makes the coupling between flow, solute transport and
+membrane behaviour explicit while still using the familiar PIMPLE
+machinery.
+
+\subsection{Field creation, membrane diagnostics and transport properties}
+
+Field creation is handled in two main headers:
+
+\begin{itemize}
+	\item \textbf{\texttt{createFields.H}} reads the primary fields
+	(\texttt{U}, \texttt{p\_rgh}, \texttt{CA}, etc.) from the
+	\texttt{0/} directory and the physical parameters from
+	\texttt{constant/transportProperties} and
+	\texttt{constant/SRFProperties}. It also constructs the
+	turbulence model and creates all membrane diagnostic fields
+	directly: \texttt{Js} (solute flux), \texttt{Jv} (solvent flux),
+	\texttt{CAp} (permeate solute concentration) and \texttt{Gama}
+	(dimensionless polarisation factor). When the user enables the
+	tracer via the runtime switch \texttt{solveTracer} in
+	\texttt{controlDict}, \texttt{createFields.H} additionally
+	allocates the tracer fields \texttt{CT}, \texttt{DT},
+	\texttt{DTeff}, \texttt{JsT}, \texttt{CTp} and \texttt{GamaT}
+	through \texttt{autoPtr} holders. All diagnostic fields are
+	created with \texttt{AUTO\_WRITE} so that they are automatically
+	written at output times.
+\end{itemize}
+
+The header \texttt{updateTransportProperties.H} is called once before
+the time loop and then at each outer PIMPLE iteration. It performs three
+updates:
+
+\begin{enumerate}
+	\item \emph{Viscosity}: the laminar transport model
+	\texttt{laminarTransport} is corrected using the current
+	concentration field \texttt{CA}, so that the kinematic viscosity
+	\(\nu(\mathrm{CA})\) follows the chosen \texttt{CAViscosity}
+	model.
+	
+	\item \emph{Molecular diffusivity}: the scalar field \texttt{DAB} is
+	updated as a function of \texttt{CA}, using a polynomial
+	relation. Boundary conditions on \texttt{DAB} are corrected
+	afterwards.
+	
+	\item \emph{Density}: a non--dimensional density field \texttt{rhok}
+	is recomputed according to a Boussinesq--type law,
+	\(\rho_k = 1 + \beta\,\mathrm{CA}\), and its boundary
+	conditions are corrected.
+\end{enumerate}
+
+Updating these properties inside the PIMPLE loop strengthens the
+coupling between momentum and solute transport: any change in
+\texttt{CA} is immediately reflected in \(\nu\), \(D_{AB}\) and
+\(\rho_k\).
+
+\subsection{Momentum and pressure equations}
+
+Inside the outer \texttt{while (pimple.loop())}:
+
+\begin{itemize}
+	\item \textbf{\texttt{UEqn.H}} assembles the transient momentum
+	equation using implicit time discretisation
+	(\texttt{fvm::ddt}), a convection term
+	\texttt{fvm::div(phi,U)}, viscous/turbulent stresses via
+	\texttt{turbulence->divDevReff(U)}, and a Coriolis source term
+	\(2\rho\,\boldsymbol{\Omega}\times\mathbf{U}\) for the rotating
+	frame. The equation is then solved for the velocity field
+	\texttt{U}.
+	
+	\item \textbf{\texttt{CAEqn.H}} assembles and solves the unsteady
+	advection--diffusion equation for the solute concentration
+	\texttt{CA}. The temporal and spatial discretisations follow
+	the user-specified schemes in \texttt{system/fvSchemes}; for the
+	tutorials a bounded convection scheme is recommended together
+	with the time scheme appropriate for the chosen ddt
+	(\texttt{Euler}, \texttt{CrankNicolson}, or \texttt{localEuler}
+	when LTS is enabled).
+\end{itemize}
+
+After these solves, \texttt{updateTransportProperties.H} is called again
+to refresh \(\nu(\mathrm{CA})\), \(D_{AB}(\mathrm{CA})\) and \(\rho_k\)
+based on the newly updated \texttt{CA} field.
+
+The pressure equation is then handled in the inner loop
+\texttt{while (pimple.correct())} through \texttt{pEqn.H}. This step
+enforces continuity, updates \texttt{p\_rgh} (and the associated face
+flux \texttt{phi}) and accounts for the rotation--induced hydrostatic
+term and the specified pressure reference. When
+\texttt{pimple.turbCorr()} is true, the turbulence model is also
+corrected in the same outer iteration.
+
+\subsection{Membrane boundary conditions and the \texorpdfstring{$\Gamma$}{Gamma} diagnostic}
+
+The actual membrane physics is implemented in custom boundary condition
+classes applied to \texttt{U} and \texttt{CA}. These boundary
+conditions:
+
+\begin{itemize}
+	\item compute, for each membrane face, the solvent flux \(J_v\) and
+	solute flux \(J_s\) according to the selected transport model
+	(e.g. pressure--driven with osmotic correction);
+	\item update the permeate concentration \(C_p\) and a dimensionless
+	diagnostic \(\Gamma\) that characterises local solute rejection
+	or concentration polarisation.
+\end{itemize}
+
+At volume level, these per--face quantities are exported into the
+membrane diagnostic fields created in \texttt{createFields.H}
+(\texttt{Js}, \texttt{Jv}, \texttt{CAp}, \texttt{Gama}, and the
+optional tracer fields when \texttt{solveTracer=true}). The header
+\texttt{Gama.H} is responsible for copying the per--face \(\Gamma\)
+values from the membrane solute boundary condition into the boundary of
+the volume field \texttt{Gama}, so that \texttt{Gama} can be visualised
+and sampled like any other \texttt{volScalarField}. For efficiency,
+\texttt{Gama.H} caches the membrane patch indices and a pointer to the
+\texttt{CA} field the first time it is called.
+
+\subsection{Post-processing: pressure reconstruction, conservation and diagnostics}
+
+After the PIMPLE loop converges at a given time, the following
+post--processing headers are executed before writing:
+
+\paragraph{\texttt{pReconstruct.H}}
+
+The solver works internally with the modified pressure \texttt{p\_rgh}
+to simplify the treatment of gravity in a rotating frame. For analysis,
+it is convenient to have the absolute pressure field. The header
+\texttt{pReconstruct.H} reconstructs
+
+\[
+p = (p\_\text{rgh} + \rho_k\,g\,h)\,\rho_0 + p_\text{ref},
+\]
+
+where \(\rho_0\) is a reference density and \(p_\text{ref}\) the chosen
+pressure reference, and then calls \texttt{p.correctBoundaryConditions()}
+to keep the boundaries consistent.
+
+\paragraph{\texttt{monitorConservation.H}}
+
+This header checks global solute conservation in a parallel--safe way.
+It requires the fields \texttt{CA}, \texttt{U}, \texttt{Js},
+\texttt{Jv}, \texttt{CAp} and the face flux \texttt{phi}; an optional
+\texttt{Deff} field can be supplied to account for diffusive fluxes at
+walls. It builds (or appends to) the file
+
+\[
+\texttt{postProcessing/conservation/cons.dat},
+\]
+
+writing at each output time the total solute mass in the domain, the
+time derivative of that mass, the integrated inlet, outlet, membrane and
+diffusive contributions, and a residual and relative error that measure
+how well the discrete balance is satisfied. This file is the main tool
+to verify that the coupled flow--membrane scheme is globally
+conservative.
+
+\paragraph{\texttt{Gama.H} and \texttt{GamaT.H}}
+
+As described above, \texttt{Gama.H} maps the per--face diagnostic
+\(\Gamma\) from the membrane solute boundary condition into the volume field
+\texttt{Gama}.  In the 2026 release, a companion header \texttt{GamaT.H}
+performs the analogous mapping for the tracer polarisation factor \texttt{GamaT}.
+This is done patch by patch on the membrane boundaries, with simple consistency checks (same number of faces) to avoid copying errors.
+
+At the end of this post--processing stage,
+\texttt{runTime.write()} writes all \texttt{AUTO\_WRITE} fields
+(\texttt{U}, \texttt{p}, \texttt{p\_rgh}, \texttt{CA}, \texttt{Js},
+\texttt{Jv}, \texttt{CAp}, \texttt{Gama}, and the tracer
+counterparts when enabled), and the solver advances to the next
+time level.
+
+% ===========================================================================
+
+
+\section{Case studies with \texttt{centriMembSolver}}
+\label{sec:cases}
+
+This section presents an example case that illustrates how to use
+\texttt{centriMembSolver}.  It is designed to be readable even for
+readers who are not familiar with OpenFOAM.
+
+In OpenFOAM, each simulation (``case'') is stored in a directory with a
+standard structure:
+\begin{itemize}
+	\item \texttt{0/} contains the \emph{initial and boundary conditions}
+	for all fields (for example velocity, pressure and concentration);
+	\item \texttt{constant/} contains the \emph{physical properties}
+	(for example fluid properties, solute properties, membrane
+	parameters, rotation settings);
+	\item \texttt{system/} contains the \emph{numerical setup}
+	(mesh generation with \texttt{blockMesh}, time step controls,
+	linear solvers, etc.).
+\end{itemize}
+
+To run a case, one typically:
+\begin{enumerate}
+	\item generates the mesh (for example with \texttt{blockMesh} or a
+	helper script);
+	\item runs the solver (here \texttt{centriMembSolver});
+	\item inspects the results in ParaView or in text files written in
+	\texttt{postProcessing/}.
+\end{enumerate}
+
+Below we describe a simple 2D slit case (\texttt{rotatingSlit})
+that exercises the full pipeline (mesh, BCs, solver, post-processing).
+
+% ---------------------------------------------------------------------------
+\subsection{\texttt{rotatingSlit}}
+
+The example case \texttt{rotatingSlit} distributed with the solver
+provides a simple yet instructive demonstration.  It consists of a
+two-dimensional slit domain rotated about its centre.  The membrane
+occupies a section of the side wall; the remaining boundaries are
+inlet, outlet, symmetry and empty patches.
+
+\subsubsection*{Geometry and mesh}
+
+The geometry is defined by \texttt{system/blockMeshDict}.  A narrow
+slit of length \SI{4}{\centi\metre} and width \SI{1}{\milli\metre} is
+discretised into a structured mesh.  One boundary, named
+\texttt{membraneB}, is assigned the membrane boundary conditions.  A
+second boundary \texttt{membraneA} is present but disabled in this
+case.  Front and back patches are declared as \texttt{empty} to
+produce a two-dimensional simulation.
+
+\subsubsection*{Initial and boundary conditions}
+
+The inlet velocity is fixed at $\mathbf{U}_\mathrm{in} = (0.01, 0, 0)$~m/s
+along the slit axis.  The initial solute
+concentration is uniform (\SI{5}{kg/m^3}) and the inlet condition sets
+\texttt{CAin} to a higher or lower value to induce concentration
+polarisation.  The membrane on patch \texttt{membraneB} is configured
+with
+\begin{itemize}
+	\item a target average solvent flux of \SI{3e-5}{m/s},
+	\item limits \texttt{AhMin = 1e-13} and \texttt{AhMax = 1e-9},
+	\item reflection coefficient $\sigma=1$, and
+	\item virial coefficients
+	$(7314.5\,\mathrm{Pa\,m^3\,kg^{-1}},
+	8.253\,\mathrm{Pa\,m^6\,kg^{-2}})$.
+\end{itemize}
+On the solute side the membrane uses the intrinsic rejection model with
+\texttt{Rint = 0.99} and reference concentration \texttt{CAb = 1.0}.  A
+fixed–flux pressure condition ensures continuity of volumetric flow.
+
+\subsubsection*{Running the case}
+
+To run the example, follow these steps in the case directory:
+
+\begin{enumerate}
+	\item Compile the solver (only needed once) by executing \texttt{wmake}
+	in the \texttt{solver} directory.
+	\item Generate the mesh using
+	\begin{verbatim}
+		blockMesh
+	\end{verbatim}
+	\item Adjust \texttt{constant/SRFProperties} to set the rotation
+	speed $\boldsymbol{\Omega}$ if desired.  The default example uses
+	\texttt{rpm = 0}, but any non–zero value can be specified.
+	\item Run the simulation with
+	\begin{verbatim}
+		centriMembSolver -case rotatingSlit > log &
+	\end{verbatim}
+	\item Monitor progress via the log or the files in
+	\texttt{postProcessing}.  Key outputs include
+	\texttt{Rint\_vs\_time.dat} (intrinsic rejection over time),
+	\texttt{calibratedProperties.dat} (effective permeability for
+	target average flux) and \texttt{cons.dat} (mass conservation).
+\end{enumerate}
+
+Figure~\ref{fig:rotatingSlit-results} shows a real run of the bundled
+\texttt{rotatingSlit} tutorial.  Two transients are visible.
+
+\textbf{Panel (a) --- targetAverageFlux calibration.}
+The \texttt{targetAverageFlux} solvent model dynamically adjusts the
+effective hydraulic permeability $A_h^\ast$ at every time step so that
+the area-averaged solvent flux matches the prescribed
+\texttt{JvAverage}.  Starting from a low initial value (no
+polarisation, weak osmotic counter-pressure), $A_h^\ast$ converges to
+its steady operating value (here $4.36\times 10^{-11}$~m\,(Pa\,s)$^{-1}$)
+within ${\sim}15$~s of simulated time.  By construction the model
+keeps $\langle J_v\rangle$ exactly at the target throughout.
+
+\textbf{Panel (b) --- concentration polarisation signature.}
+The intrinsic rejection imposed at the membrane is constant by
+construction ($R_\mathrm{int} = 0.99$, dashed line), while the
+observed rejection
+\begin{equation*}
+	R_\mathrm{obs}(t) = 1 - \frac{\langle J_v C_p\rangle(t)}{\langle J_v\rangle(t)\,C_b}
+\end{equation*}
+descends from values close to $R_\mathrm{int}$ at the onset of
+permeation (no polarisation yet) towards a steady value
+substantially below $R_\mathrm{int}$ ($R_\mathrm{obs}\approx 0.60$
+here), reflecting the equilibrium polarisation that the simulation
+establishes at the membrane.  The $R_\mathrm{int}{-}R_\mathrm{obs}$
+gap is the operational signature of concentration polarisation, and
+is automatically logged under
+\texttt{postProcessing/membraneSoluteFlux/<patch>/Rint\_vs\_time.dat}
+(columns: time, $R_\mathrm{int}$, $R_\mathrm{obs}$).
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=\linewidth]{figures/rotatingSlit_results.pdf}
+	\caption{Real outputs of the bundled \texttt{rotatingSlit} tutorial
+		(2D slit, $L\times h = $ \SI{4}{cm}$\times$\SI{1}{mm}, NaCl-like
+		feed at \SI{5}{kg/m^3}, $\sigma=1$, $R_\mathrm{int}=0.99$,
+		\texttt{JvAverage}$= 3\times 10^{-5}$~m/s).
+		(a) Calibrated hydraulic permeability $A_h^\ast(t)$ extracted
+		from the patch dictionary at each write time, showing the
+		\texttt{targetAverageFlux} model converging to the steady
+		operating permeability ($\sim 4.36\times 10^{-11}$~m\,(Pa\,s)$^{-1}$).
+		(b) Time evolution of the observed rejection $R_\mathrm{obs}$
+		on patch \texttt{membraneB} (red), starting near
+		$R_\mathrm{int}$ (dashed line, prescribed) and stabilising
+		around $0.60$ as the polarised layer builds up.  Data from
+		\texttt{postProcessing/membraneSoluteFlux/membraneB/Rint\_vs\_time.dat}
+		and the saved patch dictionaries (\texttt{<time>/U}).}
+	\label{fig:rotatingSlit-results}
+\end{figure}
+
+% ===========================================================================
+\section{Practical guidance}
+
+\paragraph{Stability and time stepping.}
+With the Coriolis source treated explicitly, the convective Courant
+condition is the dominant time-step constraint; keep the Courant
+number below \(\sim 1\) near the membrane.  When using
+\texttt{targetAverageFlux}, choose the bounds \texttt{AhMin} and
+\texttt{AhMax} narrowly around the expected steady operating
+permeability: a range that is too wide allows the calibrated
+\(A_h^*\) to wander outside the physical regime and may produce
+oscillatory behaviour.  When using \texttt{observedRejection}, pick a
+tight tolerance \texttt{tol} and verify that the target
+\(R_\mathrm{obs}\) lies inside the physically realistic interval
+\([\,R_{\rm int,min},\,R_{\rm int,max}\,]\) -- otherwise the inverse
+search hits the bracket and reports a clamped value rather than the
+target.
+
+\paragraph{Parallel consistency.}
+All membrane boundary conditions and diagnostics use parallel
+reductions (\texttt{Pstream::reduce}, \texttt{returnReduce}) and are
+safe out of the box on decomposed meshes.  For complex geometries or
+very fine meshes, however, it is advisable to invoke
+\texttt{redistributePar} after \texttt{decomposePar} so that each
+membrane patch is owned by a single processor: this avoids subtle
+load-balancing artefacts in the area-weighted averages.  The
+conservation monitor (\texttt{postProcessing/conservation/cons.dat})
+provides a quick sanity check on mass balances across processor
+boundaries.
+
+% ===========================================================================
+\section{References}
+
+\begin{enumerate}
+	\item Spiegler, K. S. \& Kedem, O. (1966). Thermodynamics of hyperfiltration (reverse osmosis): criteria for efficient membranes. \emph{Desalination}, 1, 311–326.
+	\item Wu, J. J. (2019). On the application of the Spiegler–Kedem model to forward osmosis. \emph{BMC Chemical Engineering}, 1, article 15. \href{https://doi.org/10.1186/s42480-019-0014-8}{doi:10.1186/s42480-019-0014-8}. (Discusses how the S–K model accommodates deviations from ideal semi-permeability.)
+	\item Chandrasekhar, S. (1961). \emph{Hydrodynamic and Hydromagnetic Stability}. Clarendon Press, Oxford. International Series of Monographs on Physics. (Classical reference for absorbing the centrifugal term into the pressure gradient in rotating Boussinesq flows.)
+	\item Lopez, J. M., Marques, F. \& Avila, M. (2013). The Boussinesq approximation in rapidly rotating flows. \emph{Journal of Fluid Mechanics}, 737, 56–77. \href{https://doi.org/10.1017/jfm.2013.558}{doi:10.1017/jfm.2013.558}. (Explicit modern formulation of the gravity + centrifugal absorption; eqs.~(2.1)–(2.3) used as reference for the \texttt{gh}/\texttt{p\_rgh} construction in this solver.)
+\end{enumerate}
+
+\end{document}
