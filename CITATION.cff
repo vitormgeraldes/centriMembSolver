@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: centriMembSolver
+type: software
+authors:
+  - family-names: Geraldes
+    given-names: Vítor
+    affiliation: Instituto Superior Técnico, University of Lisbon
+    orcid: "https://orcid.org/0000-0001-6653-8506"
+abstract: >-
+  A finite-volume OpenFOAM solver for transient incompressible flow with
+  solute and passive-tracer transport across selective membranes in a
+  uniformly rotating frame. Derived from buoyantBoussinesqPimpleFoam.
+url: "https://github.com/vitormgeraldes/centriMembSolver"
+repository-code: "https://github.com/vitormgeraldes/centriMembSolver"
+license: GPL-3.0-or-later
+version: 1.1.1
+date-released: "2026-05-10"
+keywords:
+  - OpenFOAM
+  - membrane filtration
+  - concentration polarization
+  - Boussinesq approximation
+  - rotating frame
+  - Spiegler-Kedem
+  - direct numerical simulation

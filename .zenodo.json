@@ -1,0 +1,27 @@
+{
+    "title": "centriMembSolver: a finite-volume solver for rotating membrane systems built on OpenFOAM technology",
+    "description": "<p><strong>centriMembSolver</strong> is a finite-volume solver for transient, incompressible flow with solute and passive-tracer transport across selective membranes in a uniformly rotating frame. It is derived from OpenFOAM's <code>buoyantBoussinesqPimpleFoam</code> (v2506) and adds:</p><ul><li>Explicit treatment of Coriolis and centrifugal forces in the momentum equation, with the centrifugal hydrostatic component absorbed into the modified pressure <code>p_rgh</code> via the <code>gh</code> field (classical rotating-Boussinesq construction);</li><li>A custom <code>CAViscosity</code> kinematic-viscosity model with a polynomial dependence on solute concentration;</li><li>Three custom membrane boundary conditions (<code>membraneSolventFlux</code>, <code>membraneSoluteFlux</code>, <code>membraneTracerFlux</code>), each offering three Spiegler--Kedem / Kedem--Katchalsky modeling choices (intrinsic rejection, solute permeability, observed rejection; constant flux, target average flux, etc.);</li><li>Built-in mass-conservation diagnostics and per-patch flux logging.</li></ul><p>Compatible with OpenFOAM® v2506. Distributed under GPL-3.0-or-later. Documentation under CC-BY-4.0.</p>",
+    "creators": [
+        {
+            "name": "Geraldes, Vítor",
+            "affiliation": "Instituto Superior Técnico, University of Lisbon",
+            "orcid": "0000-0001-6653-8506"
+        }
+    ],
+    "license": "GPL-3.0-or-later",
+    "access_right": "open",
+    "upload_type": "software",
+    "keywords": [
+        "OpenFOAM",
+        "computational fluid dynamics",
+        "membrane filtration",
+        "concentration polarization",
+        "Boussinesq approximation",
+        "rotating frame",
+        "Spiegler-Kedem",
+        "Kedem-Katchalsky",
+        "nanofiltration",
+        "reverse osmosis",
+        "direct numerical simulation"
+    ]
+}
