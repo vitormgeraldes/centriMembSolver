@@ -29,7 +29,12 @@ boundaryField
     }
     inlet
     {
-        type            fixedValue;
+        // Open top (v1.2.1): only the MEAN of p_rgh is fixed; the distribution is
+        // extrapolated from the interior, so the hydrostatic pressure signature of
+        // the plumes (p_rgh' = -beta*gh*CA') is not clamped and the eddies cross
+        // the boundary instead of being reflected (a fixedValue p_rgh reflects them).
+        type            fixedMean;
+        meanValue       0;
         value           uniform 0;
     }
     yMinus

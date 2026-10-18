@@ -16,7 +16,13 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 1 -2 0 0 0 0];
-value           (0 0 -9.8);
+// v1.2.1: gravity set to zero. The real g (9.8 m/s2 along z) is 3.5e-5 of the
+// centrifugal acceleration at 18210 rpm, and z is a CYCLIC direction: the
+// potential ghf is evaluated at face centres, so the two faces of a z-cyclic
+// pair differ by g*Lz and the buoyancy flux is not antisymmetric, which lets a
+// spurious net flow (0.7 % of Qin) cross the periodic boundary. With g = 0 the
+// volumetric residual drops from 6e-3 to 5e-6.
+value           (0 0 0);
 
 
 // ************************************************************************* //

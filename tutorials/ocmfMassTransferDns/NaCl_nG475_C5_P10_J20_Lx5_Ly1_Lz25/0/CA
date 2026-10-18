@@ -34,46 +34,10 @@ boundaryField
     }
     inlet
     {
-        type            inletOutlet;
-        inletValue      uniform $CA0;
-        value           uniform $CA0;
-        // ---------------------------------------------------------------
-        // ALTERNATIVE (v1.2.0): recirculation-conserving open boundary.
-        // Once buoyant plumes reach this patch, phi changes sign face by
-        // face (|phi| up to 40x the net inflow). With inletOutlet the fluid
-        // leaves at the local Ci and re-enters at CA0: a net loss of
-        // retained solute of 1-7 % of the feed over 5 s. This coded BC makes
-        // re-entering fluid carry the flux-weighted mean of what left; only
-        // the NET inflow brings fresh feed at CA0. Reduces the artefact to
-        // +/-0.2 %. Replace the inletOutlet block above by this one.
-        // See postProcessing/conservation/exchange.dat for the exchange.
-        /*
-                type            codedMixed;
-        name            recircInlet;
-        refValue        uniform $CA0;
-        refGradient     uniform 0;
-        valueFraction   uniform 1;
-        value           uniform $CA0;
-        code
-        #{
-            const scalar C0 = $CA0;   // NB: $CA0 is NOT expanded inside #{ #}; write the number
-            const fvsPatchField<scalar>& phip =
-                patch().lookupPatchField<surfaceScalarField, scalar>("phi");
-            const scalarField Ci(patchInternalField());
-            scalar qOut = 0, mOut = 0, qIn = 0;
-            forAll(phip, i)
-            {
-                if (phip[i] > 0) { qOut += phip[i]; mOut += phip[i]*Ci[i]; }
-                else             { qIn  -= phip[i]; }
-            }
-            reduce(qOut, sumOp<scalar>()); reduce(mOut, sumOp<scalar>()); reduce(qIn, sumOp<scalar>());
-            const scalar qNet = qIn - qOut;                       // caudal líquido que entra
-            const scalar Cmix = (qIn > SMALL) ? (mOut + qNet*C0)/qIn : C0;
-            this->refValue()      = Cmix;
-            this->refGrad()       = 0.0;
-            this->valueFraction() = 1.0 - pos0(phip);             // entra: fixo Cmix; sai: zeroGradient
-        #};
-        */
+        // Open top (v1.2.1): fluid leaves and re-enters with its local
+        // concentration. inletOutlet (re-entry at CA0) loses 1-7 % of the
+        // retained solute through the recirculating plumes.
+        type            zeroGradient;
     }
     yMinus
     {

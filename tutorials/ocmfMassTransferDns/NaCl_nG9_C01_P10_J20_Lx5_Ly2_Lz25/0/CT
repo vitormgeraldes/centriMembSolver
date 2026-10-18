@@ -47,9 +47,8 @@ boundaryField
     }
     inlet
     {
-        type            inletOutlet;
-        inletValue      uniform $CT0;
-        value           uniform $CT0;
+        // Open top (v1.2.1): same treatment as CA (see 0/CA).
+        type            zeroGradient;
     }
     yMinus
     {

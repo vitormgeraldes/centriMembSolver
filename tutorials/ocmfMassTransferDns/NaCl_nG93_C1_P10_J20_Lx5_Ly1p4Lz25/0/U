@@ -73,8 +73,11 @@ boundaryField
 
     inlet
     {
-        type            pressureInletUniformVelocity;
-        value           uniform (0 0 0);
+        // Open top (v1.2.1): velocity extrapolated on every face. Do NOT use
+        // pressureInletOutletVelocity here: it sets zero tangential velocity on
+        // inflow faces, which acts as a tangential no-slip and damps the eddies
+        // in the last ~0.2 mm (strongly, with the refined cells next to this patch).
+        type            zeroGradient;
     }
     yMinus
     {
