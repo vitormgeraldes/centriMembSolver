@@ -1,14 +1,30 @@
 /*---------------------------------------------------------------------------*\
-  monitorConservation.H — OpenFOAM v2506 (stationary mesh, parallel safe)
-  Requisitos (fatal se faltar): CA, U, Js, Jv, CAp, phi
-  Opcional: Deff (para fluxo difusivo em paredes)
-  Output: <rootCase>/postProcessing/conservation/cons.dat
+  monitorConservation.H — global solute balance CONSISTENT with the discretised
+  CA equation (v1.2.0, 18-Oct-2026).
 
-  Implementação:
-  - Convecção do soluto medida com fvc::flux(phi,CA,"div(phi,CA)") para ficar
-    CONSISTENTE com o scheme já existente em fvSchemes.
-  - Mantém exatamente as MESMAS colunas no output (não adiciona nada).
-  - Mantém o cache (como no teu original) — só mexo no mínimo pedido.
+  The balance uses the face fluxes of the CA matrix that was just solved
+  (phiCAeqn = CAEqn.flux(): implicit convection + diffusion, with the phi the
+  equation was assembled with) and the time derivative of the same scheme
+  (fvc::ddt). The residual
+
+      R = sum_cells V*ddt(CA) + sum_boundary phiCAeqn - mSp
+
+  is therefore zero up to linear-solver tolerance, whatever the boundary
+  conditions. mSp is the cell source of the 'bounded' convection scheme,
+  -CA*div(phi), zero when continuity is satisfied.
+
+  Open boundaries (fixed pressure + inletOutlet) can carry flow in BOTH
+  directions through the same patch once buoyant plumes reach them. The solute
+  leaving at the local concentration and replaced by feed at C0 is a genuine
+  boundary flux of the equation, NOT a conservation error. It is reported per
+  patch in postProcessing/conservation/exchange.dat:
+      Qin, Qout       volumetric flow entering / leaving the patch [m3/s]
+      mFeedIn         solute entering with the inflow faces      [kg/s]
+      mExchOut        solute leaving through the outflow faces   [kg/s]
+  so that the user can compute the exchange loss mExchOut - Qout*C0.
+
+  Output: postProcessing/conservation/cons.dat (columns unchanged except mDiff,
+  replaced by mSp) and exchange.dat.
 \*---------------------------------------------------------------------------*/
 
 #include "fvc.H"
@@ -18,151 +34,66 @@
 #include "Pstream.H"
 #include "OSspecific.H"
 
-static const Foam::word DIFF_FIELD_NAME("Deff");
-
 {
     const fvMesh& mesh_ = mesh;
     const Time&   time_ = mesh_.time();
 
-    // ====== Require campos obrigatórios ======
-    if
-    (
-        !mesh_.foundObject<volScalarField>("CA")  ||
-        !mesh_.foundObject<volVectorField>("U")   ||
-        !mesh_.foundObject<volScalarField>("Js")  ||
-        !mesh_.foundObject<volScalarField>("Jv")  ||
-        !mesh_.foundObject<volScalarField>("CAp") ||
-        !mesh_.foundObject<surfaceScalarField>("phi")
-    )
-    {
-        FatalErrorInFunction
-            << "[monitor] Required fields missing. Need: "
-            << "CA (volScalarField), U (volVectorField), "
-            << "Js, Jv, CAp (volScalarField), phi (surfaceScalarField)."
-            << exit(FatalError);
-    }
+    // ===== Inventory =====
+    const scalarField& Vnow = mesh_.V().field();
+    const scalarField& Cnow = CA.internalField();
+    const scalar Mnow = gSum(Cnow*Vnow);                                  // [kg]
 
-    const volScalarField& CA  = mesh_.lookupObject<volScalarField>("CA");
-    const volVectorField& U   = mesh_.lookupObject<volVectorField>("U");
-    const volScalarField& JsF = mesh_.lookupObject<volScalarField>("Js");
-    const volScalarField& JvF = mesh_.lookupObject<volScalarField>("Jv");
-    const volScalarField& CAp = mesh_.lookupObject<volScalarField>("CAp");
-    const surfaceScalarField& phi = mesh_.lookupObject<surfaceScalarField>("phi");
-    (void)CAp; // apenas para forçar existência; não é usado no balanço
+    // Time derivative of the ddt scheme actually used (Euler, CN, backward, LTS)
+    const scalar dMdt = gSum(fvc::ddt(CA)().primitiveField()*Vnow);      // [kg/s]
 
-    const bool haveDeff = mesh_.foundObject<volScalarField>(DIFF_FIELD_NAME);
-    const volScalarField* Dptr = haveDeff
-        ? &mesh_.lookupObject<volScalarField>(DIFF_FIELD_NAME) : nullptr;
+    // Cell source of the 'bounded' convection scheme: -Sp(div(phi)) -> +CA*div(phi) on the flux side
+    const scalar mSp = gSum(Cnow*fvc::div(phiAtCA)().primitiveField()*Vnow);
 
-    // ===== Inventário (massa total) =====
-    const scalarField& Vnow = mesh_.V().field();       // [m3]
-    const scalarField& Cnow = CA.internalField();      // [kg/m3]
-    const scalar       Mnow = gSum(Cnow * Vnow);       // [kg]
-
-    scalar Mold = Mnow;
-    const bool haveOld = (CA.timeIndex() > 0);
-    if (haveOld)
-    {
-        const scalarField& Cold = CA.oldTime().internalField();
-        Mold = gSum(Cold * Vnow);
-    }
-
-    const scalar dtStep   = max(time_.deltaTValue(), SMALL);
-    const scalar dMdtStep = haveOld ? (Mnow - Mold)/dtStep : 0.0;
-
-    static label  cache_ti   = -1;
-    static scalar cache_M    = Mnow;
-    static scalar cache_dMdt = dMdtStep;
-
-    if (time_.timeIndex() != cache_ti)
-    {
-        cache_M    = Mnow;
-        cache_dMdt = dMdtStep;
-        cache_ti   = time_.timeIndex();
-    }
-
-    const scalar M    = cache_M;
-    const scalar dMdt = cache_dMdt;
-
-    // ===== Acumulação por patches =====
-    scalar mIn   = 0.0;
-    scalar mOut  = 0.0;
-    scalar mMem  = 0.0;
-    scalar mDiff = 0.0;
-    scalar Qnet  = 0.0;
-    scalar Qin   = 0.0;
-
-    // ===== Fluxo convectivo DISCRETO do soluto (consistente com div(phi,CA)) =====
-    surfaceScalarField phiCA
-    (
-        IOobject("phiCA", time_.timeName(), mesh_, IOobject::NO_READ, IOobject::NO_WRITE),
-        fvc::flux(phi, CA, "div(phi,CA)")
-    );
-
+    // ===== Boundary fluxes from the matrix (out positive) =====
+    scalar mIn = 0, mOut = 0, mMem = 0, Qnet = 0, Qin = 0;
     const polyBoundaryMesh& pbm = mesh_.boundaryMesh();
+
+    // per-patch exchange diagnostics
+    DynamicList<word>   xName;
+    DynamicList<scalar> xQin, xQout, xFeed, xExch;
 
     forAll(pbm, pid)
     {
         const polyPatch& pp = pbm[pid];
-        const word& pType = pp.type();
+        if (pp.coupled() || pp.type() == "empty" || pp.type() == "wedge") continue;
 
-        // Skip coupled patches (processor/cyclic/AMI) and empty/wedge
-        if (pp.coupled() || pType == "empty" || pType == "wedge")
-            continue;
+        const scalarField& fp   = phiCAeqn.boundaryField()[pid];        // [kg/s] matrix flux
+        const scalarField& php  = phiAtCA.boundaryField()[pid];         // [m3/s]
+        const scalarField& CAb  = CA.boundaryField()[pid];              // face values used by the matrix
 
-        const scalarField& A      = mesh_.magSf().boundaryField()[pid]; // [m2]
-        const scalarField& JsP    = JsF.boundaryField()[pid];           // [kg/(m2 s)]
-        const scalarField& JvP    = JvF.boundaryField()[pid];           // [m/s]
+        const scalar mp = gSum(fp);
+        const scalar Qp = gSum(php);
+        Qnet += Qp; if (Qp < 0) Qin -= Qp;
 
-        const bool memVol = (U.boundaryField()[pid].type()  == "membraneSolventFlux");
         const bool memSol = (CA.boundaryField()[pid].type() == "membraneSoluteFlux");
-
-        // ---- Fluxo volumétrico (saída +)
-        scalar Qp = 0.0;
-        if (memVol)
+        if (memSol)
         {
-            // Usa sempre Jv (sem retrofluxo já garantido pela BC)
-            Qp = gSum(JvP * A);                         // [m3/s]
+            mMem += mp;
         }
         else
         {
-            // Convecção geral por phi (positivo = saída)
-            Qp = gSum(phi.boundaryField()[pid]);        // [m3/s]
-        }
+            if (mp >= 0) mOut += mp; else mIn -= mp;
 
-        Qnet += Qp;
-        if (Qp < 0) Qin += -Qp;
-
-        // ---- Soluto pela membrana (Js) — saída +
-        if (memSol)
-        {
-            mMem += gSum(JsP * A);                      // [kg/s]
-        }
-
-        // ---- Convecção genérica (não-membrana) — agora via phiCA (discreto)
-        if (!memVol && !memSol)
-        {
-            const scalar md = gSum(phiCA.boundaryField()[pid]); // [kg/s], saída +
-            if (md >= 0) mOut += md; else mIn += -md;
-        }
-
-        // ---- Difusão: só em paredes (pType == "wall") — mantido igual ao original
-        if (!memVol && !memSol && haveDeff && pType == "wall")
-        {
-            const scalarField& Dp = Dptr->boundaryField()[pid];          // [m2/s]
-            const scalarField  dC = CA.boundaryField()[pid].snGrad();    // [kg/m4]
-            mDiff += - gSum(Dp * dC * A);                                // [kg/s]
+            scalar qi = 0, qo = 0, mi = 0, mo = 0;
+            forAll(php, i)
+            {
+                if (php[i] < 0) { qi -= php[i]; mi -= php[i]*CAb[i]; }
+                else            { qo += php[i]; mo += php[i]*CAb[i]; }
+            }
+            reduce(qi, sumOp<scalar>()); reduce(qo, sumOp<scalar>());
+            reduce(mi, sumOp<scalar>()); reduce(mo, sumOp<scalar>());
+            xName.append(pp.name()); xQin.append(qi); xQout.append(qo); xFeed.append(mi); xExch.append(mo);
         }
     }
 
-    // Resíduos e rácios
-    const scalar R    = dMdt - mIn + mOut + mMem + mDiff;          // [kg/s]
+    const scalar R    = dMdt - mIn + mOut + mMem - mSp;                   // [kg/s]
     const scalar relQ = (Qin > SMALL) ? mag(Qnet)/Qin : GREAT;
-
-    scalar Mref = 0.0;
-    Mref = max(Mref, mIn);
-    Mref = max(Mref, mOut + mag(mMem) + mag(mDiff));
-    Mref = max(Mref, mag(dMdt));
+    scalar Mref = max(mIn, max(mOut + mag(mMem), mag(dMdt)));
     const scalar relM = (Mref > SMALL) ? mag(R)/Mref : GREAT;
 
     const scalar CAmin = gMin(CA);
@@ -171,75 +102,57 @@ static const Foam::word DIFF_FIELD_NAME("Deff");
     if (Pstream::master())
     {
         Info<< "Conservation @ t=" << time_.timeName()
-            << "  M="    << M
-            << "  dM/dt="<< dMdt
-            << "  mIn="  << mIn
-            << "  mOut=" << mOut
-            << "  mMem=" << mMem
-            << "  mDiff="<< mDiff
-            << "  Qnet=" << Qnet
-            << "  Qin="  << Qin
-            << "  relQ=" << relQ
-            << "  R="    << R
-            << "  relM=" << relM << nl
-            << "CA[min,max] = [" << CAmin << ", " << CAmax << "]" << nl
-            << endl;
-    }
-
-    // ===== Output (append) — only on solver write times, and only once (master) =====
-    if (Pstream::master() && time_.outputTime())
-    {
-        const Time& rt = mesh_.time();
-
-        // Case root (outside processorN/ in parallel execution)
-        const fileName outDir  = rt.globalPath()/"postProcessing"/"conservation";
-        const fileName outFile = outDir/"cons.dat";
-        mkDir(outDir);
-
-        if (isDir(outDir))
+            << "  M=" << Mnow << "  dM/dt=" << dMdt
+            << "  mIn=" << mIn << "  mOut=" << mOut << "  mMem=" << mMem
+            << "  mSp=" << mSp << "  Qnet=" << Qnet << "  Qin=" << Qin
+            << "  relQ=" << relQ << "  R=" << R << "  relM=" << relM << nl;
+        forAll(xName, k)
         {
-            OFstream os
-            (
-                outFile,
-                IOstream::ASCII,
-                IOstream::UNCOMPRESSED,
-                IOstreamOption::APPEND
-            );
-
-            if (os.good())
+            if (xQout[k] > SMALL)
             {
-                const bool needHeader = (fileSize(outFile) == 0);
-                if (needHeader)
-                {
-                    os<< "# time  M[kg]  dMdt[kg/s]  mIn[kg/s]  mOut[kg/s]  "
-                         "mMem[kg/s]  mDiff[kg/s]  Qnet[m3/s]  Qin[m3/s]  "
-                         "relQ[-]  R[kg/s]  relM[-]\n";
-                }
-
-                os<< rt.timeOutputValue() << "  "
-                  << M     << "  "
-                  << dMdt  << "  "
-                  << mIn   << "  "
-                  << mOut  << "  "
-                  << mMem  << "  "
-                  << mDiff << "  "
-                  << Qnet  << "  "
-                  << Qin   << "  "
-                  << relQ  << "  "
-                  << R     << "  "
-                  << relM  << "\n";
-            }
-            else
-            {
-                Warning<< "[monitor] Could not open for append: " << outFile << nl;
+                Info<< "Exchange @ patch " << xName[k]
+                    << "  Qin=" << xQin[k] << "  Qout=" << xQout[k]
+                    << "  recirculation Qout/Qnet=" << xQout[k]/max(xQin[k]-xQout[k], SMALL)
+                    << "  mFeedIn=" << xFeed[k] << "  mExchOut=" << xExch[k] << nl;
             }
         }
-        else
+        Info<< "CA[min,max] = [" << CAmin << ", " << CAmax << "]" << nl << endl;
+    }
+
+    if (Pstream::master() && time_.outputTime())
+    {
+        const fileName outDir = time_.globalPath()/"postProcessing"/"conservation";
+        mkDir(outDir);
         {
-            Warning<< "[monitor] mkDir failed? " << outDir << nl;
+            const fileName outFile = outDir/"cons.dat";
+            OFstream os(outFile, IOstream::ASCII, IOstream::UNCOMPRESSED, IOstreamOption::APPEND);
+            if (os.good())
+            {
+                if (fileSize(outFile) == 0)
+                {
+                    os<< "# time  M[kg]  dMdt[kg/s]  mIn[kg/s]  mOut[kg/s]  mMem[kg/s]  "
+                         "mSp[kg/s]  Qnet[m3/s]  Qin[m3/s]  relQ[-]  R[kg/s]  relM[-]\n";
+                }
+                os<< time_.timeOutputValue() << "  " << Mnow << "  " << dMdt << "  "
+                  << mIn << "  " << mOut << "  " << mMem << "  " << mSp << "  "
+                  << Qnet << "  " << Qin << "  " << relQ << "  " << R << "  " << relM << "\n";
+            }
+        }
+        {
+            const fileName outFile = outDir/"exchange.dat";
+            OFstream os(outFile, IOstream::ASCII, IOstream::UNCOMPRESSED, IOstreamOption::APPEND);
+            if (os.good())
+            {
+                if (fileSize(outFile) == 0)
+                {
+                    os<< "# time  patch  Qin[m3/s]  Qout[m3/s]  mFeedIn[kg/s]  mExchOut[kg/s]\n";
+                }
+                forAll(xName, k)
+                {
+                    os<< time_.timeOutputValue() << "  " << xName[k] << "  " << xQin[k] << "  "
+                      << xQout[k] << "  " << xFeed[k] << "  " << xExch[k] << "\n";
+                }
+            }
         }
     }
 }
-/*---------------------------------------------------------------------------*\
-  End monitorConservation.H
-\*---------------------------------------------------------------------------*/

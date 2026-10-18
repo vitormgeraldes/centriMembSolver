@@ -75,7 +75,30 @@ volScalarField Deff
     DAB  // initial value; will be updated each iteration below
 );
 
+// Discrete solute flux of the CA matrix (filled in CAEqn.H, read in monitorConservation.H)
+surfaceScalarField phiCAeqn
+(
+    IOobject
+    (
+        "phiCAeqn",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::NO_WRITE
+    ),
+    mesh,
+    dimensionedScalar("phiCAeqn", dimMass/dimTime, 0.0)
+);
+
+// Copy of phi at CA-assembly time (for the recirculation diagnostics)
+surfaceScalarField phiAtCA
+(
+    IOobject("phiAtCA", runTime.timeName(), mesh, IOobject::NO_READ, IOobject::NO_WRITE),
+    phi
+);
+
 mesh.setFluxRequired(p_rgh.name());
+mesh.setFluxRequired(CA.name());   // CAEqn.flux() used by monitorConservation.H
 
 #include "readRotationalAcceleration.H"
 
