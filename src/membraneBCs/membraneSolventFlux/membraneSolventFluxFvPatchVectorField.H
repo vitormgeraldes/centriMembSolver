@@ -75,7 +75,6 @@
         TYPICAL USAGE (boundary entries in 0/U)
         ---------------------------------------
         // 1) Spiegler–Kedem
-        /*
         membrane
         {
             type            membraneSolventFlux;
@@ -94,10 +93,8 @@
 
             value           uniform (0 0 0);
         }
-        */
 
         // 2) constantFlux
-        /*
         membrane
         {
             type            membraneSolventFlux;
@@ -109,10 +106,8 @@
 
             value           uniform (0 0 0);
         }
-        */
 
         // 3) targetAverageFlux
-        /*
         membrane
         {
             type            membraneSolventFlux;
@@ -133,7 +128,6 @@
 
             value           uniform (0 0 0);
         }
-        */
 
     NOTES
     -----
