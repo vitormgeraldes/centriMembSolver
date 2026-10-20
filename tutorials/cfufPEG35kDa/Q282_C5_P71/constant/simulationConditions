@@ -1,0 +1,47 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      simulationConditions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Case Q282_C5_P71: radial cross-flow ultrafiltration cell (CFUF), PEG 35 kDa
+//   feed flow rate Q = 2.82 L/min, C0 = 5 kg/m3, TMP = 7.1 bar
+// Jv and Robs are the values measured in the experimental run Q282_C5_P71
+// (Jv = 75.1 L/(m2 h), observed rejection 41.77 %).
+// Uin = Q/A0, A0 = pi*D0^2/4, D0 = 6.2 mm (inlet diameter).
+//
+// Between the 36 cases only this file, 0/CA, 0/U, 0/k, 0/omega and the
+// lower limit of the CA scheme in system/fvSchemes (= C0) differ.
+
+// Solute; its properties are in constant/speciesData/PEG35000, included by
+// constant/transportProperties
+solute      PEG35000;
+
+// Operating conditions. Of this file only rRef, RPM and Pref are read
+// (constant/rRef, constant/SRFProperties, constant/pRef); 0/U and 0/CA
+// contain the same values of Uin, Jv, Robs and CA0 as literals.
+Uin         1.5567705;    // [m/s]   mean inlet velocity, Q/A0
+Jv          2.086111e-05; // [m/s]   mean permeate flux (JvAverage in 0/U)
+Robs        0.4177;       // [-]     observed rejection (Robs in 0/CA)
+CA0         5;            // [kg/m3] feed concentration
+
+// Passive tracer (not used: solveTracer false in system/controlDict)
+RTobs       1.0;
+CT0         0.001;
+
+// Rotating frame: not used, the CFUF cell does not rotate (RPM = 0)
+rRef        0;
+RPM         0;
+Pref        710000;       // [Pa]    nominal transmembrane pressure (7.1 bar)
+
+// ************************************************************************* //

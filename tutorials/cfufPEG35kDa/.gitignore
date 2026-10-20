@@ -1,0 +1,14 @@
+# Run-time output of the cases in this folder
+*/constant/polyMesh/
+*/constant/extendedFeatureEdgeMesh/
+*/constant/triSurface/*.eMesh*
+*/processor*/
+*/[1-9]*/
+*/0.[0-9]*/
+*/-[0-9]*/
+*/0.ori/
+*/postProcessing/
+*/dynamicCode/
+*/VTK/
+log.*
+*.foam

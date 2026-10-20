@@ -1,0 +1,208 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    class       dictionary;
+    format      ascii;
+    location    "system";
+    object      snappyHexMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// 2-D mesh of the cell cross-section from constant/triSurface/radialCell2D.stl
+// (regions patch0 ... patch9), inside the background mesh of
+// system/blockMeshDict.
+// The regions are grouped into named patches by system/createPatchDict.snap.
+// Dictionary written by SimFlow; the entry simflowType is not read by OpenFOAM.
+
+castellatedMesh true;
+snap            true;
+addLayers       true;
+geometry
+{
+    radialCell2D.stl
+    {
+        type            triSurfaceMesh;
+        simflowType     stl;
+        name            radialCell2D;
+        includedAngle   120.0;
+        splitAngle      150.0;
+        faceGroups
+        {
+            patch6
+            {
+                name            radialCell2D;
+            }
+            patch7
+            {
+                name            radialCell2D;
+            }
+            patch8
+            {
+                name            radialCell2D_axis;
+            }
+            patch0
+            {
+                name            radialCell2D_inlet;
+            }
+            patch9
+            {
+                name            radialCell2D_outlet;
+            }
+            patch1
+            {
+                name            radialCell2D_walls;
+            }
+            patch3
+            {
+                name            radialCell2D_walls;
+            }
+            patch4
+            {
+                name            radialCell2D_walls;
+            }
+            patch5
+            {
+                name            radialCell2D_walls;
+            }
+            patch2
+            {
+                name            radialCell2D_membrane;
+            }
+        }
+    }
+}
+castellatedMeshControls
+{
+    locationInMesh  (-0.001 0.00125 3.1021427E-5);
+    refinementSurfaces
+    {
+        radialCell2D
+        {
+            level           ( 0 0 );
+            patchInfo
+            {
+                type            wall;
+            }
+        }
+    }
+    refinementRegions
+    {
+    }
+    limitRegions
+    {
+    }
+    features
+    (
+    {
+        file            "radialCell2D.eMesh";
+        levels          ((0 0));
+    }
+    );
+    maxLocalCells   1000000;
+    maxGlobalCells  10000000;
+    nCellsBetweenLevels 4;
+    maxLoadUnbalance 0.1;
+    minRefinementCells 10;
+    resolveFeatureAngle 30.0;
+    allowFreeStandingZoneFaces true;
+}
+snapControls
+{
+    tolerance       1.0;
+    nSmoothPatch    3;
+    nSolveIter      500;
+    nRelaxIter      5;
+    nFeatureSnapIter 10;
+    implicitFeatureSnap true;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap true;
+    nFaceSplitInterval 5;
+}
+addLayersControls
+{
+    layers
+    {
+        radialCell2D_patch1
+        {
+            nSurfaceLayers  1;
+            expansionRatio  1.0;
+            firstLayerThickness 0.5;
+        }
+        radialCell2D_patch3
+        {
+            nSurfaceLayers  1;
+            expansionRatio  1.0;
+            firstLayerThickness 0.5;
+        }
+        radialCell2D_patch4
+        {
+            nSurfaceLayers  1;
+            expansionRatio  1.0;
+            firstLayerThickness 0.5;
+        }
+        radialCell2D_patch5
+        {
+            nSurfaceLayers  1;
+            expansionRatio  1.0;
+            firstLayerThickness 0.5;
+        }
+        radialCell2D_patch2
+        {
+            nSurfaceLayers  1;
+            expansionRatio  1.0;
+            firstLayerThickness 0.5;
+        }
+    }
+    relativeSizes   true;
+    minThickness    0.1;
+    firstLayerThickness 0.2;
+    expansionRatio  1.25;
+    nGrow           0;
+    featureAngle    180.0;
+    maxFaceThicknessRatio 0.5;
+    nSmoothSurfaceNormals 5;
+    nSmoothThickness 10;
+    minMedialAxisAngle 90.0;
+    maxThicknessToMedialRatio 0.5;
+    nMedialAxisIter 100;
+    nSmoothNormals  3;
+    slipFeatureAngle 30.0;
+    nRelaxIter      5;
+    nBufferCellsNoExtrude 0;
+    nLayerIter      50;
+    nRelaxedIter    20;
+    detectExtrusionIsland true;
+}
+meshQualityControls
+{
+    maxNonOrtho     65.0;
+    maxBoundarySkewness 20.0;
+    maxInternalSkewness 4.0;
+    maxConcave      80.0;
+    minVol          1.0E-15;
+    minTetQuality   1.0E-20;
+    minArea         -1.0;
+    minTwist        0.02;
+    minTriangleTwist -1.0;
+    minDeterminant  0.01;
+    minFaceWeight   0.05;
+    minVolRatio     0.01;
+    minVolCollapseRatio 0.1;
+    nSmoothScale    4;
+    errorReduction  0.75;
+    relaxed
+    {
+        maxNonOrtho     75.0;
+    }
+}
+mergeTolerance  1.0E-6;
+debug           0;
+
+// ************************************************************************* //

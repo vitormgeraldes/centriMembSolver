@@ -1,0 +1,69 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+//   - Euler (first order) in time
+//   - cellLimited gradient (limits overshoots in steep boundary layers)
+//   - limitedVanLeer for CA with limits [C0, 300] kg/m3. This is not clipping:
+//     it is the range in which the TVD scheme is active; outside it the
+//     limiter returns 0 (pure upwind). Lower limit: feed concentration C0;
+//     the upper limit is the same in all cases. The third number (1) is not
+//     read (LimitedLimiter(Istream&) reads two scalars).
+ddtSchemes
+{
+    default         Euler 1;
+}
+
+gradSchemes
+{
+    default         cellLimited Gauss linear 0.5;
+}
+
+divSchemes
+{
+    default                         none;
+
+    div(phi,U)                      Gauss linearUpwindV grad(U);
+    div(phi,CA)                     Gauss limitedVanLeer 1 300 1;
+    div(phi,k)                      Gauss upwind;
+    div(phi,omega)                  Gauss upwind;
+    div((nuEff*dev2(T(grad(U)))))   Gauss linear;
+    div(((nut+nuField)*dev2(T(grad(U))))) Gauss linear;
+}
+
+laplacianSchemes
+{
+    default         Gauss linear limited corrected 0.5;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    // Limited non-orthogonal correction (checkMesh: maximum
+    // non-orthogonality 70.6 deg)
+    default         limited 0.5;
+}
+
+wallDist
+{
+    method          meshWave;
+}
+
+// ************************************************************************* //

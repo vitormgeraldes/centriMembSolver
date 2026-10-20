@@ -1,0 +1,35 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      extrudeMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Turns the 2-D mesh into a 1.5 deg wedge about the x axis (one cell layer):
+// the patch wedge_back is swept and the new face is wedge_front.
+
+constructFrom   patch;
+sourceCase      ".";
+sourcePatches   (wedge_back);
+exposedPatchName wedge_front;
+extrudeModel    sector;
+axisPt          (0.0 0.0 0.0);
+axis            (1.0 0.0 0.0);
+angle           1.5;
+nLayers         1;
+expansionRatio  1.0;
+flipNormals     true;
+mergeTol        0.0;
+mergeFaces      false;
+
+// ************************************************************************* //
