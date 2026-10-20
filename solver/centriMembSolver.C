@@ -50,6 +50,8 @@ License
 #include "turbulentTransportModel.H"
 #include "fvOptions.H"
 #include "pimpleControl.H"
+#include "localEulerDdtScheme.H"
+#include "fvcSmooth.H"
 #include "membraneSoluteFluxFvPatchScalarField.H"
 #include "membraneTracerFluxFvPatchScalarField.H"
 #include "membraneSolventFluxFvPatchVectorField.H"
@@ -82,12 +84,18 @@ int main(int argc, char *argv[])
     // PIMPLE controller (v2506)
     #include "createPimpleControl.H"
 
-    #include "CourantNo.H"
+    // LTS auto-detection: scans fvSchemes/ddtSchemes for any field using
+    // localEuler. If found, allocates rDeltaT and sets LTS=true.
+    #include "createRDeltaT.H"
 
-    // Time controls: declare & read (v2506 expects these before setInitialDeltaT)
+    // Standard global Δt control (used only when LTS is off)
     #include "createTimeControls.H"
     #include "readTimeControls.H"
-    #include "setInitialDeltaT.H"
+    if (!LTS)
+    {
+        #include "CourantNo.H"
+        #include "setInitialDeltaT.H"
+    }
 
     #include "initContinuityErrs.H"
 
@@ -103,8 +111,15 @@ int main(int argc, char *argv[])
     {
 
         #include "readTimeControls.H"
-        #include "CourantNo.H"
-        #include "setDeltaT.H"
+        if (LTS)
+        {
+            #include "setRDeltaT.H"
+        }
+        else
+        {
+            #include "CourantNo.H"
+            #include "setDeltaT.H"
+        }
 
         ++runTime;
 
