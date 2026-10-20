@@ -1,0 +1,105 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (3.113541 0 0);
+
+boundaryField
+{
+    sym1
+    {
+        type            wedge;
+    }
+    sym2
+    {
+        type            wedge;
+    }
+    axis
+    {
+        type            slip;
+    }
+    inlet
+    {
+        type            fixedValue;
+        value           uniform (3.113541 0 0);
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    membrane
+    {
+        // Solvent (permeate) flux through the membrane, normal to the patch.
+        // targetAverageFlux: local Jv = max(0, Ah*drive), with
+        //   drive = p - pPermConst - sigma*(pi(CA) - pi(CAp))   (pi from virialCoeffs)
+        //   Ah    = JvAverage/(area average of drive), limited to [AhMin, AhMax],
+        // recomputed at every update of the boundary condition.
+        type            membraneSolventFlux;
+        model           targetAverageFlux;
+        JvAverage       8.161111e-06;
+        AhMin           1e-13;
+        AhMax           1e-09;
+        sigma           1;
+        pPermConst      0;
+        CAName          CA;
+        CApName         CAp;
+        virialCoeffs    ( 207.857 1.51947 0.0894622 );
+        CAViscosityCoeffs
+        {
+            fieldName       CA;
+            nu0             [ 0 2 -1 0 0 0 0 ] 1.0018e-06;
+            nu1             [ -1 5 -1 0 0 0 0 ] 4.1249e-08;
+            nu2             [ -2 8 -1 0 0 0 0 ] 7.3401e-10;
+            nu3             [ -3 11 -1 0 0 0 0 ] 8.4041e-12;
+            nu4             [ -4 14 -1 0 0 0 0 ] 4.5553e-15;
+            clamp
+            {
+                min             [ 0 2 -1 0 0 0 0 ] 1e-08;
+                max             [ 0 2 -1 0 0 0 0 ] 0.001;
+            }
+        }
+        diffusivity
+        {
+            DAB0            4e-11;
+            DAB1            2.4016e-13;
+            DAB2            6.9523e-16;
+            DAB3            1.0342e-18;
+            DAB4            2.4533e-21;
+        }
+        density
+        {
+            rho0            998.23;
+            beta            0.000166;
+        }
+        massTransfer
+        {
+            Sct             0.7;
+        }
+        windowAverage   true;
+        Twindow         1;
+        value           uniform (0 0 0);
+    }
+    wall1
+    {
+        type            noSlip;
+    }
+}
+
+
+// ************************************************************************* //

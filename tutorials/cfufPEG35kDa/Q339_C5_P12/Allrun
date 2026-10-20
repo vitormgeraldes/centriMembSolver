@@ -1,0 +1,21 @@
+#!/bin/sh
+cd "${0%/*}" || exit                                # Run from this directory
+. ${WM_PROJECT_DIR:?}/bin/tools/RunFunctions        # Tutorial run functions
+#------------------------------------------------------------------------------
+# Complete run of this case:
+#   mesh (makeMesh) -> decomposePar -> centriMembSolver in parallel
+#   -> reconstructPar of the last time.
+# The number of MPI ranks is numberOfSubdomains in system/decomposeParDict.
+# All OpenFOAM commands must run from this directory: the dictionaries
+# #include "./constant/simulationConditions", resolved from the working directory.
+#------------------------------------------------------------------------------
+
+runApplication ./makeMesh || exit 1
+
+runApplication decomposePar || exit 1
+
+runParallel "$(getApplication)" || exit 1
+
+runApplication reconstructPar -latestTime
+
+#------------------------------------------------------------------------------

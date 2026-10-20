@@ -1,0 +1,80 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+/*  PEG 35 kDa transport properties (T = 20 C, water as solvent)
+ *
+ *  Origin of the fits:
+ *   - pi(C), cubic:      fit to 3 low-concentration cryoscopic points (unpublished
+ *                        measurements) plus the origin. A point at C = 200 g/L was
+ *                        discarded because of cryoscopic bias at high solute mass
+ *                        fraction. Stanley (2004) and Flory are kept as external
+ *                        references (different PEG batch, < 35 % apart at high C).
+ *   - nu(C), degree 4:   Chebyshev (L-infinity) fit to Milano-Timko, 7 points
+ *                        (C = 0-50 g/L), plus 3 unpublished viscosity points
+ *                        (C = 100, 150, 200 g/L); max |error| = 1.9 %.
+ *   - D_AB(C), degree 4: fit to the Darken-exponential model
+ *                        D(C) = D0 exp(alpha wA(C)), D0 = 4e-11 m2/s, alpha = 6
+ *                        (conservative value); max |error| = 0.004 % with respect
+ *                        to the Darken target.
+ *   - rho(C), linear (Boussinesq): rho_k = 1 + beta*CA, with beta estimated from
+ *                        the concentration contraction of PEG in water at 20 C.
+ *
+ *  Units: C in kg/m3; pi in Pa; nu in m2/s; D_AB in m2/s; rho_k dimensionless.
+ *  Coefficients generated on 2026-04-24.
+\*---------------------------------------------------------------------------*/
+
+// Osmotic pressure: pi(C) = a1*C + a2*C^2 + a3*C^3   [Pa, C in kg/m3]
+virialCoeffs
+(
+    207.8569
+      1.519474
+      0.08946217
+);
+
+// Kinematic viscosity polynomial (degree 4)
+//   nu(C) = nu0 + nu1*C + nu2*C^2 + nu3*C^3 + nu4*C^4
+CAViscosityCoeffs
+{
+    fieldName   CA;
+    nu0         [ 0  2 -1 0 0 0 0]  1.0018e-6;
+    nu1         [-1  5 -1 0 0 0 0]  4.1249e-8;
+    nu2         [-2  8 -1 0 0 0 0]  7.3401e-10;
+    nu3         [-3 11 -1 0 0 0 0]  8.4041e-12;
+    nu4         [-4 14 -1 0 0 0 0]  4.5553e-15;
+
+    clamp
+    {
+        min     [0 2 -1 0 0 0 0]  1e-08;
+        max     [0 2 -1 0 0 0 0]  1e-03;
+    }
+}
+
+// Mutual diffusivity polynomial (degree 4)
+//   D_AB(C) = DAB0 + DAB1*C + DAB2*C^2 + DAB3*C^3 + DAB4*C^4
+diffusivity
+{
+    DAB0   4.000e-11;
+    DAB1   2.4016e-13;
+    DAB2   6.9523e-16;
+    DAB3   1.0342e-18;
+    DAB4   2.4533e-21;
+}
+
+// Boussinesq density:  rho_k = 1 + beta*CA   (CA in kg/m3)
+density
+{
+    rho0   998.23;
+    beta   1.66e-4;
+}
+
+// Optional turbulent Schmidt number (only used if Deff = D_AB + nu_t/Sc_t)
+massTransfer
+{
+    Sct    0.7;
+}
+
+// ************************************************************************* //

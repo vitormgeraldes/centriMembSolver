@@ -1,0 +1,75 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      createPatchDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Second renaming pass (after extrudeMesh): gives the 7 patches the names
+// and types used in 0/.
+//
+//   wedge_back              -> sym1
+//   wedge_front             -> sym2
+//   radialCell2D_axis       -> axis
+//   radialCell2D_inlet      -> inlet
+//   radialCell2D_outlet     -> outlet
+//   radialCell2D_membrane   -> membrane
+//   radialCell2D_walls      -> wall1
+
+pointSync false;
+
+patches
+(
+    {
+        name        sym1;
+        patchInfo   { type wedge; }
+        constructFrom patches;
+        patches     ( wedge_back );
+    }
+    {
+        name        sym2;
+        patchInfo   { type wedge; }
+        constructFrom patches;
+        patches     ( wedge_front );
+    }
+    {
+        name        axis;
+        patchInfo   { type wall; }
+        constructFrom patches;
+        patches     ( radialCell2D_axis );
+    }
+    {
+        name        inlet;
+        patchInfo   { type wall; }
+        constructFrom patches;
+        patches     ( radialCell2D_inlet );
+    }
+    {
+        name        outlet;
+        patchInfo   { type patch; }
+        constructFrom patches;
+        patches     ( radialCell2D_outlet );
+    }
+    {
+        name        membrane;
+        patchInfo   { type wall; }
+        constructFrom patches;
+        patches     ( radialCell2D_membrane );
+    }
+    {
+        name        wall1;
+        patchInfo   { type wall; }
+        constructFrom patches;
+        patches     ( radialCell2D_walls );
+    }
+);
+
+// ************************************************************************* //

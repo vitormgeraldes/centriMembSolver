@@ -1,0 +1,20 @@
+#!/bin/sh
+cd "${0%/*}" || exit                                # Run from this directory
+. ${WM_PROJECT_DIR:?}/bin/tools/CleanFunctions      # Tutorial clean functions
+#------------------------------------------------------------------------------
+# Remove the mesh, the feature-edge files, time directories, processor*/,
+# postProcessing/ and logs. The initial conditions in 0/ are kept.
+#------------------------------------------------------------------------------
+
+# Undo an interrupted makeMesh (0/ moved to 0.ori/)
+if [ -d 0.ori ] && [ ! -e 0 ]
+then
+    mv 0.ori 0
+fi
+
+cleanCase
+
+rm -rf constant/extendedFeatureEdgeMesh
+rm -f constant/triSurface/radialCell2D.eMesh*
+
+#------------------------------------------------------------------------------
