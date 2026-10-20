@@ -1,0 +1,66 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#include "./constant/simulationConditions"
+
+ddtSchemes
+{
+    default         CrankNicolson 1.0;       // second order in time
+}
+
+gradSchemes
+{
+    default         Gauss linear;
+}
+
+divSchemes
+{
+    default                             none;
+
+    // Momentum: linear (central) interpolation
+    div(phi,U)      Gauss linear;
+
+    // Solute CA and tracer CT: bounded TVD scheme (no over/undershoots)
+    div(phi,CA) bounded Gauss limitedLinear 1;
+    div(phi,CT) bounded Gauss limitedLinear 1;
+
+    // Viscous term
+    div((nuEff*dev2(T(grad(U)))))  Gauss linear;
+}
+
+laplacianSchemes
+{
+    // orthogonal: no non-orthogonal correction (checkMesh: max non-orthogonality 0)
+    default         Gauss linear orthogonal;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         orthogonal;              // consistent with laplacianSchemes
+}
+
+wallDist
+{
+    method          meshWave;
+}
+
+// ************************************************************************* //

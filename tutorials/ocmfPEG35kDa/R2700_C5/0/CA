@@ -1,0 +1,75 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       volScalarField;
+    location    "0";
+    object      CA;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+#include "./constant/simulationConditions"
+dimensions      [1 -3 0 0 0 0 0];
+
+internalField   uniform $CA0;
+
+boundaryField
+{
+    membrane
+    {
+        // Solute flux through the membrane (mixed/Robin condition on CA).
+        // observedRejection: the intrinsic rejection Rint is inferred at every
+        // update so that the flux-weighted observed rejection
+        //   1 - <Jv*CAp>/<Jv>/CAb   equals Robs;   CAp = (1 - Rint)*Cw.
+        // With CAb > 0 the BC also computes the polarization Gama = (Cw - CAb)/CAb
+        // (Cw: wall concentration). The computeGama entry is not read by the BC;
+        // it is kept as in the original runs.
+        type            membraneSoluteFlux;
+        model           observedRejection;
+        Robs            $Robs;
+        UName           U;
+        computeGama     yes;
+        CAb             $CA0;
+        value           uniform 0;
+    }
+    inlet
+    {
+        type            inletOutlet;
+        inletValue      uniform $CA0;
+        value           uniform $CA0;
+    }
+    AMI_fine
+    {
+        type            cyclicAMI;
+    }
+    AMI_coarse
+    {
+        type            cyclicAMI;
+    }
+    yMinus
+    {
+        type            cyclic;
+    }
+    yPlus
+    {
+        type            cyclic;
+    }
+    zMinus
+    {
+        type            cyclic;
+    }
+    zPlus
+    {
+        type            cyclic;
+    }
+}
+
+
+// ************************************************************************* //
