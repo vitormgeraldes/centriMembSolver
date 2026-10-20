@@ -1,0 +1,127 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     centriMembSolver;
+
+startFrom       latestTime;
+startTime       0;
+stopAt          endTime;
+endTime         30;
+
+deltaT          1e-5;
+
+writeControl    adjustableRunTime;
+writeInterval   0.01;
+purgeWrite      0;
+
+writeFormat       ascii;
+writeCompression  on;
+writePrecision    6;
+
+timeFormat      general;
+timePrecision   6;
+
+runTimeModifiable true;
+adjustTimeStep    yes;
+
+// Adaptive time step: maximum Courant number and maximum time step [s]
+maxCo     1;
+maxDeltaT 0.005;
+
+centriMembSolver
+{
+    solveTracer false;        // no passive tracer in this case
+}
+
+// No top-level libs(): libGamaPatchAvgTimeWindow.so is loaded inside the
+// function object that uses it (keeps decomposePar independent of the
+// custom libraries).
+
+functions
+{
+    // Volume average of U over the whole domain
+    // -> postProcessing/meanU/<startTime>/volFieldValue.dat
+    meanU
+    {
+        type            volFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        log             true;
+        writeControl    timeStep;
+        writeInterval   20;
+        writeFields     false;
+        regionType      all;
+        operation       volAverage;
+        fields          ( U );
+    }
+
+    // Area-weighted mean/std of Gama on the membrane and its running mean over
+    // the last timeWindow seconds (library libGamaPatchAvgTimeWindow)
+    // -> postProcessing/Gama_membrane_avgWin/areaAvg_timeWindow.dat
+    //    postProcessing/KPI/Gama_membrane.txt
+    GamaPatchAvgTimeWindow1
+    {
+        type            GamaPatchAvgTimeWindow;
+        libs            ("libGamaPatchAvgTimeWindow.so");
+        patchName       membrane;
+        fieldName       Gama;
+        timeWindow      1;            // [s] of simulated time
+        writeControl    writeTime;
+        log             true;
+        outputName      Gama_membrane_avgWin;
+        fileName        areaAvg_timeWindow.dat;
+    }
+
+    // Vorticity field, written at write times
+    vorticity1
+    {
+        type            vorticity;
+        libs            ("libfieldFunctionObjects.so");
+        enabled         true;
+        field           U;
+        result          vorticity;
+        writeControl    writeTime;
+    }
+
+    // Time average and variance of the Gama field (written at write times)
+    fieldAverage1
+    {
+        type            fieldAverage;
+        libs            (fieldFunctionObjects);
+        writeControl    writeTime;
+        fields
+        (
+            Gama
+            {
+                mean        on;
+                prime2Mean  on;
+                base        time;
+            }
+        );
+        restartTime     1;
+    }
+
+    // Wall shear stress on the membrane and on the walls
+    // -> postProcessing/wallShearStress/<startTime>/wallShearStress.dat
+    wallShearStress
+    {
+        type            wallShearStress;
+        libs            ("libfieldFunctionObjects.so");
+        patches         ( membrane "wall.*" );
+        writeControl    writeTime;
+    }
+}
+
+// ************************************************************************* //

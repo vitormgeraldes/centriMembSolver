@@ -1,0 +1,85 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      createPatchDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// First renaming pass (after snappyHexMesh): groups the patches created from
+// the STL regions patch0 ... patch9 into named patches.
+
+pointSync       false;
+patches
+(
+    {
+        name            radialCell2D;
+        patchInfo
+        {
+            type            wall;
+        }
+        constructFrom   patches;
+        patches         (radialCell2D_patch6 radialCell2D_patch7);
+    }
+
+    {
+        name            radialCell2D_axis;
+        patchInfo
+        {
+            type            wall;
+        }
+        constructFrom   patches;
+        patches         (radialCell2D_patch8);
+    }
+
+    {
+        name            radialCell2D_inlet;
+        patchInfo
+        {
+            type            wall;
+        }
+        constructFrom   patches;
+        patches         (radialCell2D_patch0);
+    }
+
+    {
+        name            radialCell2D_outlet;
+        patchInfo
+        {
+            type            wall;
+        }
+        constructFrom   patches;
+        patches         (radialCell2D_patch9);
+    }
+
+    {
+        name            radialCell2D_walls;
+        patchInfo
+        {
+            type            wall;
+        }
+        constructFrom   patches;
+        patches         (radialCell2D_patch1 radialCell2D_patch3 radialCell2D_patch4 radialCell2D_patch5);
+    }
+
+    {
+        name            radialCell2D_membrane;
+        patchInfo
+        {
+            type            wall;
+        }
+        constructFrom   patches;
+        patches         (radialCell2D_patch2);
+    }
+);
+
+// ************************************************************************* //

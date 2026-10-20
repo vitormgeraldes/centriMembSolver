@@ -1,0 +1,42 @@
+#!/bin/bash
+cd "${0%/*}" || exit 1                              # Run from this directory
+set -e
+#------------------------------------------------------------------------------
+# Mesh of the radial cell (wedge of 1.5 deg, 64 940 cells):
+#   1. blockMesh               background mesh, 420 x 602 x 1 cells
+#   2. surfaceFeatureExtract   feature edges of the STL surface
+#                              (constant/triSurface/radialCell2D.stl)
+#   3. snappyHexMesh           2-D mesh of the cell cross-section
+#   4. createPatch (snap)      groups the STL regions into named patches
+#   5. extrudeMesh             1.5 deg wedge about the x axis
+#   6. createPatch (final)     final patch names and types (used in 0/)
+#   7. refineWallLayer x 9     splits the cells next to the membrane in half,
+#                              nine times
+#   8. renumberMesh            bandwidth reduction
+# renumberMesh would also rewrite the fields in 0/ (with writePrecision 6), so
+# 0/ is moved to 0.ori while it runs and moved back afterwards.
+#------------------------------------------------------------------------------
+
+if [ -e 0.ori ]
+then
+    echo "0.ori exists (interrupted makeMesh?): run ./Allclean first" 1>&2
+    exit 1
+fi
+
+blockMesh
+surfaceFeatureExtract
+snappyHexMesh -overwrite
+createPatch -overwrite -dict system/createPatchDict.snap
+extrudeMesh
+createPatch -overwrite -dict system/createPatchDict.final
+
+for i in 1 2 3 4 5 6 7 8 9
+do
+    refineWallLayer membrane 0.5 -overwrite
+done
+
+mv 0 0.ori
+trap 'mv 0.ori 0' EXIT
+renumberMesh -overwrite
+
+#------------------------------------------------------------------------------
