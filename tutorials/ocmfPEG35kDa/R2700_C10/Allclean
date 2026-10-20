@@ -1,0 +1,18 @@
+#!/bin/sh
+cd "${0%/*}" || exit                                # Run from this directory
+. ${WM_PROJECT_DIR:?}/bin/tools/CleanFunctions      # Tutorial clean functions
+#------------------------------------------------------------------------------
+# Remove the mesh, time directories, processor*/, postProcessing/ and logs.
+# The initial conditions in 0/ are kept.
+#------------------------------------------------------------------------------
+
+# Undo an interrupted makeMesh (0/ moved to 0.ori/, writeCompression off)
+if [ -d 0.ori ] && [ ! -e 0 ]
+then
+    mv 0.ori 0
+fi
+sed -i "s/^\(writeCompression[[:blank:]]\{1,\}\)[a-z]\{1,\};/\1on;/" system/controlDict
+
+cleanCase
+
+#------------------------------------------------------------------------------

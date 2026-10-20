@@ -1,0 +1,68 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       volScalarField;
+    location    "0";
+    object      CA;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Passive tracer. Read only when solveTracer is true (system/controlDict);
+// it is false in all cases of this repository.
+#include "./constant/simulationConditions"
+dimensions      [1 -3 0 0 0 0 0];
+
+internalField   uniform $CT0;
+
+boundaryField
+{
+    membrane
+    {
+        type    membraneTracerFlux;
+        model   intrinsicRejection;
+        RTint   1.0;           // tracer intrinsic rejection [-]
+        CTb     $CT0;           // bulk reference [kg/m3] for diagnostics
+        value   uniform 0;
+    }
+    inlet
+    {
+        type            inletOutlet;
+        inletValue      uniform $CT0;
+        value           uniform $CT0;
+    }
+    AMI_fine
+    {
+        type            cyclicAMI;
+    }
+    AMI_coarse
+    {
+        type            cyclicAMI;
+    }
+    yMinus
+    {
+        type            cyclic;
+    }
+    yPlus
+    {
+        type            cyclic;
+    }
+    zMinus
+    {
+        type            cyclic;
+    }
+    zPlus
+    {
+        type            cyclic;
+    }
+}
+
+
+// ************************************************************************* //

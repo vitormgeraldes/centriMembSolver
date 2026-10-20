@@ -1,0 +1,44 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      simulationConditions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Case R7070_C10: O-CMF, PEG 35 kDa, 7070 rpm, C0 = 10 kg/m3
+//            (experimental run D7070_C10, first O-CMF campaign)
+// Rotor:     Beckman JA-25.50 (PN 363055), r_max = 10.8 cm
+// Cartridge: 3rd-generation O-CMF (Geraldes 2024 paper, + 9.2 mL fill correction)
+// Membrane:  Synder NFS UF, 10 kDa MWCO, area 0.95 cm2
+//
+// Between the 12 cases only this file and numberOfSubdomains
+// (system/decomposeParDict) differ.
+
+// Solute name (must match constant/speciesData/<name>)
+solute      PEG35000;
+
+// Operating conditions (measured in the experimental run)
+Jv          2.265694e-05; // [m/s]   mean permeate flux (imposed area average)
+Robs        0.771248;     // [-]     observed rejection (imposed)
+CA0         10;           // [kg/m3] nominal feed concentration (initial solution)
+
+// Passive tracer (not solved: solveTracer false in system/controlDict)
+RTobs       1.0;
+CT0         0.001;
+
+// Geometry / rotating frame
+rRef        0.071;        // [m]     radial position of the membrane, r_m
+RPM         7070;         // [rpm]   rotor speed
+Pref        7.0e+05;      // [Pa]    nominal transmembrane pressure (set with RPM)
+
+
+// ************************************************************************* //

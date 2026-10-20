@@ -1,0 +1,84 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    arch        "LSB;label=32;scalar=64";
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+#include "./constant/simulationConditions"
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+    membrane
+    {
+        // Solvent (permeate) flux through the membrane, normal to the patch.
+        // targetAverageFlux: local Jv = max(0, Ah*drive), with
+        //   drive = p - pPermConst - sigma*(pi(CA) - pi(CAp))   (pi from virialCoeffs)
+        //   Ah    = JvAverage/(area average of drive), limited to [AhMin, AhMax],
+        // recomputed at every update of the boundary condition.
+        type            membraneSolventFlux;
+        model           targetAverageFlux;
+
+        JvAverage       $Jv;                   // [m/s] target area average
+        AhMin           1e-13;                 // [m/(Pa s)]
+        AhMax           1e-10;                 // [m/(Pa s)]
+
+        sigma           1.0;                   // [-]  reflection coefficient
+        pPermConst      0;                     // [Pa] permeate-side pressure
+        CAName          CA;
+        CApName         CAp;
+
+        // Osmotic virial coefficients (virialCoeffs) of the solute
+        #include "../constant/speciesData/PEG35000"
+
+        windowAverage   false;
+
+        value           uniform (0 0 0);
+    }
+
+    inlet
+    {
+        type            pressureInletUniformVelocity;
+        value           uniform (0 0 0);
+    }
+    AMI_fine
+    {
+        type            cyclicAMI;
+    }
+    AMI_coarse
+    {
+        type            cyclicAMI;
+    }
+    yMinus
+    {
+        type            cyclic;
+    }
+    yPlus
+    {
+        type            cyclic;
+    }
+    zMinus
+    {
+        type            cyclic;
+    }
+    zPlus
+    {
+        type            cyclic;
+    }
+}
+
+
+// ************************************************************************* //
