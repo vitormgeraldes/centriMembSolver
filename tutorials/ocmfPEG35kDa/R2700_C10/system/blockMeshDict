@@ -1,0 +1,134 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+convertToMeters 1;
+
+// ---------------------------------------------------------------------------
+// Box 5 mm (x) x 2 mm (y) x 0.25 mm (z); membrane at x = 0, inlet at x = L.
+// Two non-conformal blocks coupled by a cyclicAMI interface at x = xAMI:
+//
+//   FINE block   (membrane side, 0 <= x <= xAMI = 200 um):
+//     3.47 um cells in y and z; graded in x towards the membrane
+//     (expansion 120): first cell 0.148 um, 15 cells within 5 um of the wall.
+//
+//   COARSE block (xAMI <= x <= L):
+//     48 um cells in x, 13.9 um in y and z.
+//     The inlet-adjacent layer is refined afterwards by four passes of
+//     refineWallLayer (edge fraction 0.5), see makeMesh.
+//
+// The AMI lets the two blocks have independent y/z resolutions.
+// y and z are periodic (cyclic) in both blocks.
+// ---------------------------------------------------------------------------
+
+xAMI 0.0002;   // [m] interface position (4 % of L)
+L    0.005;    // [m] distance membrane-inlet
+
+// Fine block
+NxF  53;
+NyF  576;
+NzF  72;
+
+// Coarse block
+NxC  100;
+NyC  144;
+NzC  18;
+
+vertices
+(
+    // ---- fine block (0 .. xAMI) ----
+    (0      -0.001  0)        // 0
+    ($xAMI  -0.001  0)        // 1
+    ($xAMI   0.001  0)        // 2
+    (0       0.001  0)        // 3
+    (0      -0.001  0.00025)  // 4
+    ($xAMI  -0.001  0.00025)  // 5
+    ($xAMI   0.001  0.00025)  // 6
+    (0       0.001  0.00025)  // 7
+
+    // ---- coarse block (xAMI .. L), duplicated points at x = xAMI ----
+    ($xAMI  -0.001  0)        // 8
+    ($L     -0.001  0)        // 9
+    ($L      0.001  0)        // 10
+    ($xAMI   0.001  0)        // 11
+    ($xAMI  -0.001  0.00025)  // 12
+    ($L     -0.001  0.00025)  // 13
+    ($L      0.001  0.00025)  // 14
+    ($xAMI   0.001  0.00025)  // 15
+);
+
+blocks
+(
+    // fine block: x-grading towards the membrane (last/first cell = 120)
+    hex (0 1 2 3 4 5 6 7)
+        ($NxF $NyF $NzF)
+        simpleGrading (120 1 1)
+
+    // coarse block: uniform
+    hex (8 9 10 11 12 13 14 15)
+        ($NxC $NyC $NzC)
+        simpleGrading (1 1 1)
+);
+
+boundary
+(
+    membrane { type patch; faces ((0 3 7 4)); }     // x = 0
+    inlet    { type patch; faces ((9 10 14 13)); }  // x = L
+
+    // ---- AMI interface between the two blocks ----
+    AMI_fine
+    {
+        type            cyclicAMI;
+        neighbourPatch  AMI_coarse;
+        transform       noOrdering;
+        faces ((1 2 6 5));
+    }
+    AMI_coarse
+    {
+        type            cyclicAMI;
+        neighbourPatch  AMI_fine;
+        transform       noOrdering;
+        faces ((8 11 15 12));
+    }
+
+    // ---- periodic boundaries (span both blocks) ----
+    yMinus
+    {
+        type           cyclic;
+        neighbourPatch yPlus;
+        faces ((0 1 5 4) (8 9 13 12));
+    }
+    yPlus
+    {
+        type           cyclic;
+        neighbourPatch yMinus;
+        faces ((3 2 6 7) (11 10 14 15));
+    }
+
+    zMinus
+    {
+        type           cyclic;
+        neighbourPatch zPlus;
+        faces ((0 1 2 3) (8 9 10 11));
+    }
+    zPlus
+    {
+        type           cyclic;
+        neighbourPatch zMinus;
+        faces ((4 5 6 7) (12 13 14 15));
+    }
+);
+
+// ************************************************************************* //

@@ -1,0 +1,22 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      SRFProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+#include "./constant/simulationConditions"
+// Rotation axis through x = -0.071 m: the membrane plane x = 0 is at radius
+// r_m = 7.1 cm (source: paper Fig. 1 + JA-25.50 rotor, +1 mm scale)
+origin    (-0.071 0 0);
+axis      (0 0 1);
+rpm       $RPM;
+// ************************************************************************* //

@@ -1,0 +1,33 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#include "./constant/simulationConditions"
+// Momentum source that holds the volume-averaged velocity at
+// Ubar = (-Jv, 1e-6, 0) m/s; its y (azimuthal) component restrains the
+// mean swirl of the rotating-frame flow.
+momentumSource
+{
+    type            meanVelocityForce;
+
+    selectionMode   all;
+
+    fields          (U);
+    Ubar            (-$Jv 1e-6 0);
+    relaxation      1;
+}
+
+// ************************************************************************* //

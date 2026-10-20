@@ -1,0 +1,13 @@
+# Run-time output of the cases in this folder
+*/constant/polyMesh/
+*/processor*/
+*/[1-9]*/
+*/0.[0-9]*/
+*/-[0-9]*/
+*/0.ori/
+*/0/cellToRegion*
+*/postProcessing/
+*/dynamicCode/
+*/VTK/
+log.*
+*.foam
